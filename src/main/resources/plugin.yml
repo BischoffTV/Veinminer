@@ -1,0 +1,32 @@
+name: Veinminer
+version: '1.1'
+main: org.bischofftv.veinminer.Veinminer
+api-version: '1.21'
+description: A plugin that allows players to mine connected blocks of the same type at once.
+author: BischoffTV
+
+commands:
+  veinminer:
+    description: Toggle VeinMiner on/off or for specific tools
+    usage: /veinminer [on|off|toggle|tool <tooltype>|level]
+    aliases: [vm]
+
+  veinminerreload:
+    description: Reload the VeinMiner configuration
+    usage: /veinminerreload
+    permission: veinminer.reload
+
+  veinminerhelp:
+    description: Show help information for VeinMiner
+    usage: /veinminerhelp
+    aliases: [vmhelp]
+
+  veinminerabout:
+    description: Show information about the VeinMiner plugin
+    usage: /veinminerabout
+    aliases: [vmabout]
+
+permissions:
+  veinminer.reload:
+    description: Allows reloading the VeinMiner configuration
+    default: op

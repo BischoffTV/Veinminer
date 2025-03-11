@@ -1,0 +1,102 @@
+# VeinMiner Configuration
+
+settings:
+  # Maximum number of blocks that can be mined at once (if level system is disabled)
+  max-blocks: 64
+
+  # Durability settings
+  use-durability-multiplier: true
+  durability-multiplier: 1.0
+
+  # Hunger settings
+  use-hunger-multiplier: true
+  hunger-multiplier: 0.1
+
+  # Debug mode - enables additional logging
+  debug: false
+
+  # List of blocks that can be mined with VeinMiner
+  allowed-blocks:
+    - COAL_ORE
+    - DEEPSLATE_COAL_ORE
+    - IRON_ORE
+    - DEEPSLATE_IRON_ORE
+    - COPPER_ORE
+    - DEEPSLATE_COPPER_ORE
+    - GOLD_ORE
+    - DEEPSLATE_GOLD_ORE
+    - REDSTONE_ORE
+    - DEEPSLATE_REDSTONE_ORE
+    - DIAMOND_ORE
+    - DEEPSLATE_DIAMOND_ORE
+    - LAPIS_ORE
+    - DEEPSLATE_LAPIS_ORE
+    - EMERALD_ORE
+    - DEEPSLATE_EMERALD_ORE
+    - NETHER_GOLD_ORE
+    - NETHER_QUARTZ_ORE
+    - ANCIENT_DEBRIS
+    - OAK_LOG
+    - BIRCH_LOG
+    - SPRUCE_LOG
+    - JUNGLE_LOG
+    - ACACIA_LOG
+    - DARK_OAK_LOG
+    - MANGROVE_LOG
+    - CHERRY_LOG
+    - CRIMSON_STEM
+    - WARPED_STEM
+
+# Permission settings
+permissions:
+  # Whether to require a permission to use VeinMiner
+  require-permission: true
+  # The permission node required to use VeinMiner
+  use-permission: "veinminer.use"
+
+# Level system settings
+level-system:
+  # Whether to enable the level system
+  enabled: true
+  # Number of blocks mined to gain 1 XP
+  blocks-per-xp: 5
+  # XP required for each level (level 1 requires 0 XP)
+  xp-per-level:
+    1: 0
+    2: 100
+    3: 250
+    4: 500
+    5: 1000
+    6: 2000
+    7: 4000
+    8: 8000
+    9: 16000
+    10: 32000
+  # Maximum blocks that can be mined at each level
+  max-blocks-per-level:
+    1: 8
+    2: 16
+    3: 24
+    4: 32
+    5: 48
+    6: 64
+    7: 96
+    8: 128
+    9: 192
+    10: 256
+
+# Database settings for level system
+database:
+  # Whether to use MySQL for storing player data
+  use-mysql: true
+  host: "localhost"
+  port: 3306
+  database: "veinminer"
+  username: "root"
+  password: "password"
+  table-prefix: "vm_"
+
+logging:
+  # Discord webhook logging
+  enable-discord-logging: false
+  discord-webhook-url: ""

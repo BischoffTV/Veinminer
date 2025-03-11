@@ -1,0 +1,84 @@
+# VeinMiner Language Configuration
+
+messages:
+  prefix: "&8[&aVeinMiner&8]&r "
+
+  # Command Messages
+  command:
+    player-only: "&cThis command can only be used by players."
+    no-permission: "&cYou don't have permission to use this command."
+    unknown-subcommand: "&cUnknown subcommand. Use /veinminerhelp for help."
+    invalid-tool-type: "&cInvalid tool type. Valid types: pickaxe, axe, shovel, hoe"
+    usage-tool: "&cUsage: /veinminer tool <tooltype>"
+
+  # Toggle Messages
+  toggle:
+    enabled: "&aVeinMiner has been enabled."
+    disabled: "&cVeinMiner has been disabled."
+    tool-enabled: "&aVeinMiner has been enabled for %tool%."
+    tool-disabled: "&cVeinMiner has been disabled for %tool%."
+
+  # Help Command
+  help:
+    header: "&a=== VeinMiner Help ==="
+    toggle: "&e/veinminer &7- Toggle VeinMiner on/off"
+    on: "&e/veinminer on &7- Enable VeinMiner"
+    off: "&e/veinminer off &7- Disable VeinMiner"
+    tool: "&e/veinminer tool <tooltype> &7- Toggle VeinMiner for a specific tool"
+    level: "&e/veinminer level &7- Show your VeinMiner level and progress"
+    reload: "&e/veinminerreload &7- Reload the configuration"
+    about: "&e/veinminerabout &7- Show information about the plugin"
+    usage: "&aTo use VeinMiner, hold shift while mining."
+
+  # Level System Messages
+  level:
+    system-disabled: "&cThe VeinMiner level system is currently disabled."
+    data-not-loaded: "&cYour player data is not loaded. Please try again in a moment."
+    info:
+      header: "&a=== VeinMiner Level Info ==="
+      level: "&eLevel: &6%level%"
+      max-blocks: "&eMax Blocks: &6%max_blocks%"
+      current-xp: "&eXP: &6%current_xp%"
+      next-level: "&eXP needed for Level %next_level%: &6%xp_needed%"
+      max-level: "&eYou have reached the maximum level!"
+
+  # About Command
+  about:
+    header: "&a=== VeinMiner ==="
+    version: "&eVersion: %version%"
+    author: "&eAuthor: BischoffTV"
+    description: "&eDescription: %description%"
+    usage: "&aHold shift while mining to activate VeinMiner!"
+
+  # Reload Command
+  reload:
+    success: "&aVeinMiner configuration has been reloaded."
+
+  # Level System Messages
+  level-up: "&8[&aVeinMiner&8]&r &a&lLEVEL UP! &aYou are now level %level%! You can now mine up to %max_blocks% blocks at once."
+
+# Discord Webhook Messages
+discord:
+  embed:
+    title: "VeinMiner Activity Log"
+    color: 5763719  # Green color in decimal
+    fields:
+      - name: "Player"
+        value: "%player%"
+        inline: true
+      - name: "Blocks Destroyed"
+        value: "%blocks%"
+        inline: true
+      - name: "Location"
+        value: "World: %world%\nX: %x%\nY: %y%\nZ: %z%"
+        inline: false
+      - name: "Items Collected"
+        value: "%items%"
+        inline: false
+      - name: "Tool"
+        value: "%tool%"
+        inline: true
+      - name: "Enchantments"
+        value: "%enchantments%"
+        inline: true
+
