@@ -21,9 +21,9 @@ messages:
   # Help Command
   help:
     header: "&a=== VeinMiner Help ==="
-    toggle: "&e/veinminer &7- Toggle VeinMiner on/off"
     on: "&e/veinminer on &7- Enable VeinMiner"
     off: "&e/veinminer off &7- Disable VeinMiner"
+    toggle: "&e/veinminer &7- Toggle VeinMiner on/off"
     tool: "&e/veinminer tool <tooltype> &7- Toggle VeinMiner for a specific tool"
     level: "&e/veinminer level &7- Show your VeinMiner level and progress"
     reload: "&e/veinminerreload &7- Reload the configuration"
@@ -54,8 +54,8 @@ messages:
   reload:
     success: "&aVeinMiner configuration has been reloaded."
 
-  # Level System Messages
-  level-up: "&8[&aVeinMiner&8]&r &a&lLEVEL UP! &aYou are now level %level%! You can now mine up to %max_blocks% blocks at once."
+  # Level Up Message
+  level-up: "&a&lLEVEL UP! &aYou are now level %level%! You can now mine up to %max_blocks% blocks at once."
 
 # Discord Webhook Messages
 discord:
