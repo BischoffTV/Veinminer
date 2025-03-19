@@ -1,0 +1,57 @@
+name: Veinminer
+version: '1.1.1'
+main: org.bischofftv.veinminer.Veinminer
+api-version: '1.21'
+description: A plugin that allows players to mine connected blocks of the same type at once.
+author: BischoffTV
+
+commands:
+  veinminer:
+    description: Main command for VeinMiner
+    usage: /veinminer [on|off|toggle|tool <tooltype>|level|setlevel|achievements]
+    aliases: [vm]
+  vmtoggle:
+    description: Toggle VeinMiner on/off
+    usage: /vmtoggle [on|off]
+    aliases: [vmt]
+  vmlevel:
+    description: Check your VeinMiner level
+    usage: /vmlevel
+    aliases: [vml]
+  vmsetlevel:
+    description: Set a player's VeinMiner level
+    usage: /vmsetlevel <player> <level>
+    aliases: [vmsl]
+  vmsync:
+    description: Force data synchronization
+    usage: /vmsync
+    aliases: [vms]
+  veinminerreload:
+    description: Reload the VeinMiner configuration
+    usage: /veinminerreload
+    aliases: [vmreload]
+  veinminerabout:
+    description: Show information about the VeinMiner plugin
+    usage: /veinminerabout
+    aliases: [vmabout]
+  veinminerhelp:
+    description: Show help for VeinMiner commands
+    usage: /veinminerhelp
+    aliases: [vmhelp]
+
+permissions:
+  veinminer.reload:
+    description: Allows reloading the VeinMiner configuration
+    default: op
+
+  veinminer.admin.setlevel:
+    description: Allows setting a player's VeinMiner level
+    default: op
+
+  veinminer.admin:
+    description: Allows access to all admin commands
+    default: op
+    children:
+      veinminer.reload: true
+      veinminer.admin.setlevel: true
+
