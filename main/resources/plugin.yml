@@ -1,5 +1,5 @@
 name: Veinminer
-version: '1.1.1'
+version: '1.1.2'
 main: org.bischofftv.veinminer.Veinminer
 api-version: '1.21'
 description: A plugin that allows players to mine connected blocks of the same type at once.
@@ -8,50 +8,58 @@ author: BischoffTV
 commands:
   veinminer:
     description: Main command for VeinMiner
-    usage: /veinminer [on|off|toggle|tool <tooltype>|level|setlevel|achievements]
     aliases: [vm]
+    usage: /veinminer [on|off|toggle|tool|gui|help]
   vmtoggle:
-    description: Toggle VeinMiner on/off
-    usage: /vmtoggle [on|off]
-    aliases: [vmt]
+    description: Toggle VeinMiner on or off
+    usage: /vmtoggle
   vmlevel:
     description: Check your VeinMiner level
     usage: /vmlevel
-    aliases: [vml]
   vmsetlevel:
     description: Set a player's VeinMiner level
     usage: /vmsetlevel <player> <level>
-    aliases: [vmsl]
+    permission: veinminer.admin
   vmsync:
-    description: Force data synchronization
+    description: Synchronize VeinMiner data
     usage: /vmsync
-    aliases: [vms]
+    permission: veinminer.admin
   veinminerreload:
-    description: Reload the VeinMiner configuration
+    description: Reload VeinMiner configuration
     usage: /veinminerreload
-    aliases: [vmreload]
+    permission: veinminer.admin
   veinminerabout:
-    description: Show information about the VeinMiner plugin
+    description: Show information about VeinMiner
     usage: /veinminerabout
-    aliases: [vmabout]
   veinminerhelp:
-    description: Show help for VeinMiner commands
+    description: Show VeinMiner help
     usage: /veinminerhelp
-    aliases: [vmhelp]
-
+  vmadmin:
+    description: VeinMiner admin commands
+    usage: /vmadmin [debug|reload|sync|stats|bstats]
+    permission: veinminer.admin
 permissions:
-  veinminer.reload:
-    description: Allows reloading the VeinMiner configuration
-    default: op
-
-  veinminer.admin.setlevel:
-    description: Allows setting a player's VeinMiner level
-    default: op
-
+  veinminer.use:
+    description: Allows the player to use VeinMiner
+    default: true
+  veinminer.tool.pickaxe:
+    description: Allows the player to use VeinMiner with pickaxes
+    default: true
+  veinminer.tool.axe:
+    description: Allows the player to use VeinMiner with axes
+    default: true
+  veinminer.tool.shovel:
+    description: Allows the player to use VeinMiner with shovels
+    default: true
+  veinminer.tool.hoe:
+    description: Allows the player to use VeinMiner with hoes
+    default: true
   veinminer.admin:
-    description: Allows access to all admin commands
+    description: Allows access to all VeinMiner admin commands
     default: op
     children:
-      veinminer.reload: true
-      veinminer.admin.setlevel: true
-
+      veinminer.use: true
+      veinminer.tool.pickaxe: true
+      veinminer.tool.axe: true
+      veinminer.tool.shovel: true
+      veinminer.tool.hoe: true

@@ -5,16 +5,15 @@ import org.bukkit.ChatColor;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
-import org.bukkit.configuration.file.FileConfiguration;
+import org.bukkit.command.TabCompleter;
+import org.bukkit.entity.Player;
 
-import java.sql.Connection;
-import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
+import java.util.stream.Collectors;
 
-public class AdminCommand implements CommandExecutor {
+public class AdminCommand implements CommandExecutor, TabCompleter {
 
     private final Veinminer plugin;
 
@@ -24,301 +23,129 @@ public class AdminCommand implements CommandExecutor {
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
-        // Überprüfe, ob der Sender die Berechtigung hat
         if (!sender.hasPermission("veinminer.admin")) {
-            sender.sendMessage(ChatColor.RED + "Du hast keine Berechtigung, diesen Befehl auszuführen.");
+            sender.sendMessage(ChatColor.RED + "You don't have permission to use this command.");
             return true;
         }
 
         if (args.length == 0) {
-            showHelp(sender);
+            sendHelp(sender);
             return true;
         }
 
-        String subCommand = args[0].toLowerCase();
-
-        switch (subCommand) {
-            case "check":
-                return checkDatabaseConnection(sender);
-            case "mysql":
-                if (args.length > 1 && args[1].equalsIgnoreCase("reload")) {
-                    return reloadMySQLConnection(sender);
-                } else {
-                    sender.sendMessage(ChatColor.RED + "Unbekannter MySQL-Befehl. Verwende: /veinminer mysql reload");
-                }
-                break;
+        switch (args[0].toLowerCase()) {
             case "debug":
-                if (args.length > 1) {
-                    return toggleDebugMode(sender, args[1].equalsIgnoreCase("on"));
-                } else {
-                    boolean currentDebug = plugin.getConfig().getBoolean("settings.debug", false);
-                    sender.sendMessage(ChatColor.YELLOW + "Debug-Modus ist aktuell: " +
-                            (currentDebug ? ChatColor.GREEN + "AN" : ChatColor.RED + "AUS"));
-                    sender.sendMessage(ChatColor.YELLOW + "Verwende: /veinminer debug on|off");
-                }
+                toggleDebugMode(sender);
                 break;
-            case "config":
-                if (args.length >= 3) {
-                    return handleConfigCommand(sender, Arrays.copyOfRange(args, 1, args.length));
-                } else {
-                    sender.sendMessage(ChatColor.RED + "Verwendung: /veinminer config <pfad> <wert>");
-                }
+            case "reload":
+                reloadPlugin(sender);
                 break;
             case "sync":
-                return forceSyncData(sender);
-            case "reload":
-                return reloadPlugin(sender);
-            case "help":
-                showHelp(sender);
+                syncData(sender);
+                break;
+            case "forcesync":
+                forceSyncData(sender);
+                break;
+            case "bstats":
+                checkBStats(sender);
                 break;
             default:
-                sender.sendMessage(ChatColor.RED + "Unbekannter Befehl. Verwende /veinminer help für Hilfe.");
+                sendHelp(sender);
                 break;
         }
 
         return true;
     }
 
-    private boolean checkDatabaseConnection(CommandSender sender) {
-        sender.sendMessage(ChatColor.YELLOW + "Überprüfe Datenbankverbindung...");
-
-        if (plugin.getDatabaseManager().isFallbackMode()) {
-            sender.sendMessage(ChatColor.RED + "Plugin läuft im Fallback-Modus. MySQL-Verbindung ist nicht aktiv.");
-            sender.sendMessage(ChatColor.YELLOW + "Daten werden lokal gespeichert.");
-            return true;
-        }
-
-        try {
-            Connection conn = plugin.getDatabaseManager().getConnection();
-            if (conn == null) {
-                sender.sendMessage(ChatColor.RED + "Konnte keine Verbindung zur Datenbank herstellen.");
-                return true;
-            }
-
-            boolean isValid = conn.isValid(5); // 5 Sekunden Timeout
-            conn.close();
-
-            if (isValid) {
-                sender.sendMessage(ChatColor.GREEN + "Datenbankverbindung ist aktiv und funktioniert.");
-
-                // Zeige Datenbankeinstellungen
-                FileConfiguration config = plugin.getConfig();
-                String host = config.getString("database.host", "localhost");
-                int port = config.getInt("database.port", 3306);
-                String database = config.getString("database.database",
-                        config.getString("database.name", "veinminer"));
-                String username = config.getString("database.username", "root");
-                String tablePrefix = config.getString("database.table-prefix", "vm_");
-
-                sender.sendMessage(ChatColor.YELLOW + "Datenbankeinstellungen:");
-                sender.sendMessage(ChatColor.YELLOW + "- Host: " + ChatColor.WHITE + host + ":" + port);
-                sender.sendMessage(ChatColor.YELLOW + "- Datenbank: " + ChatColor.WHITE + database);
-                sender.sendMessage(ChatColor.YELLOW + "- Benutzer: " + ChatColor.WHITE + username);
-                sender.sendMessage(ChatColor.YELLOW + "- Tabellenpräfix: " + ChatColor.WHITE + tablePrefix);
-            } else {
-                sender.sendMessage(ChatColor.RED + "Datenbankverbindung ist nicht gültig.");
-            }
-        } catch (SQLException e) {
-            sender.sendMessage(ChatColor.RED + "Fehler bei der Überprüfung der Datenbankverbindung: " + e.getMessage());
-            plugin.getLogger().severe("Fehler bei der Überprüfung der Datenbankverbindung: " + e.getMessage());
-            e.printStackTrace();
-        }
-
-        return true;
+    private void toggleDebugMode(CommandSender sender) {
+        boolean newDebugMode = !plugin.isDebugMode();
+        plugin.setDebugMode(newDebugMode);
+        sender.sendMessage(ChatColor.GREEN + "Debug mode " + (newDebugMode ? "enabled" : "disabled") + ".");
     }
 
-    private boolean reloadMySQLConnection(CommandSender sender) {
-        sender.sendMessage(ChatColor.YELLOW + "Lade MySQL-Verbindung neu...");
-
-        try {
-            boolean wasInFallbackMode = plugin.getDatabaseManager().isFallbackMode();
-
-            // Versuche, die Verbindung neu zu laden
-            plugin.getDatabaseManager().reloadConnection();
-
-            // Überprüfe, ob die Verbindung erfolgreich hergestellt wurde
-            if (plugin.getDatabaseManager().isFallbackMode()) {
-                if (wasInFallbackMode) {
-                    sender.sendMessage(ChatColor.RED + "Konnte keine Verbindung zur Datenbank herstellen. Plugin bleibt im Fallback-Modus.");
-                } else {
-                    sender.sendMessage(ChatColor.RED + "Verbindung zur Datenbank verloren. Plugin ist jetzt im Fallback-Modus.");
-                }
-            } else {
-                if (wasInFallbackMode) {
-                    sender.sendMessage(ChatColor.GREEN + "Verbindung zur Datenbank wiederhergestellt! Plugin ist nicht mehr im Fallback-Modus.");
-                    sender.sendMessage(ChatColor.YELLOW + "Lokale Daten werden mit der Datenbank synchronisiert...");
-                } else {
-                    sender.sendMessage(ChatColor.GREEN + "MySQL-Verbindung erfolgreich neu geladen.");
-                }
-            }
-        } catch (Exception e) {
-            sender.sendMessage(ChatColor.RED + "Fehler beim Neuladen der MySQL-Verbindung: " + e.getMessage());
-            plugin.getLogger().severe("Fehler beim Neuladen der MySQL-Verbindung: " + e.getMessage());
-            e.printStackTrace();
-        }
-
-        return true;
+    private void reloadPlugin(CommandSender sender) {
+        plugin.getConfigManager().reloadConfig();
+        plugin.restartAutoSaveTask();
+        sender.sendMessage(ChatColor.GREEN + "VeinMiner configuration reloaded.");
     }
 
-    private boolean toggleDebugMode(CommandSender sender, boolean enable) {
-        // Aktuellen Wert abrufen
-        boolean currentDebug = plugin.getConfig().getBoolean("settings.debug", false);
-
-        // Wenn der Wert bereits dem gewünschten Wert entspricht, nichts tun
-        if (currentDebug == enable) {
-            sender.sendMessage(ChatColor.YELLOW + "Debug-Modus ist bereits " +
-                    (enable ? ChatColor.GREEN + "aktiviert" : ChatColor.RED + "deaktiviert") + ChatColor.YELLOW + ".");
-            return true;
-        }
-
-        // Wert in der Konfiguration ändern
-        plugin.getConfig().set("settings.debug", enable);
-        plugin.saveConfig();
-
-        // Debug-Modus im Plugin aktualisieren
-        plugin.setDebugMode(enable);
-
-        sender.sendMessage(ChatColor.YELLOW + "Debug-Modus wurde " +
-                (enable ? ChatColor.GREEN + "aktiviert" : ChatColor.RED + "deaktiviert") + ChatColor.YELLOW + ".");
-
-        return true;
+    private void syncData(CommandSender sender) {
+        sender.sendMessage(ChatColor.YELLOW + "Synchronizing data...");
+        plugin.syncDataNow();
+        sender.sendMessage(ChatColor.GREEN + "Data synchronization triggered.");
     }
 
-    private boolean handleConfigCommand(CommandSender sender, String[] args) {
-        if (args.length < 2) {
-            sender.sendMessage(ChatColor.RED + "Verwendung: /veinminer config <pfad> <wert>");
-            return true;
-        }
-
-        String path = args[0];
-        String valueStr = args[1];
-
-        // Überprüfe, ob der Pfad existiert
-        if (!plugin.getConfig().contains(path)) {
-            sender.sendMessage(ChatColor.RED + "Der Konfigurationspfad '" + path + "' existiert nicht.");
-            return true;
-        }
-
-        // Bestimme den Typ des aktuellen Werts
-        Object currentValue = plugin.getConfig().get(path);
-
-        try {
-            // Setze den neuen Wert basierend auf dem Typ des aktuellen Werts
-            if (currentValue instanceof Boolean) {
-                boolean value = Boolean.parseBoolean(valueStr);
-                plugin.getConfig().set(path, value);
-                sender.sendMessage(ChatColor.GREEN + "Konfigurationswert '" + path + "' auf " + value + " gesetzt.");
-            } else if (currentValue instanceof Integer) {
-                int value = Integer.parseInt(valueStr);
-                plugin.getConfig().set(path, value);
-                sender.sendMessage(ChatColor.GREEN + "Konfigurationswert '" + path + "' auf " + value + " gesetzt.");
-            } else if (currentValue instanceof Double) {
-                double value = Double.parseDouble(valueStr);
-                plugin.getConfig().set(path, value);
-                sender.sendMessage(ChatColor.GREEN + "Konfigurationswert '" + path + "' auf " + value + " gesetzt.");
-            } else if (currentValue instanceof Long) {
-                long value = Long.parseLong(valueStr);
-                plugin.getConfig().set(path, value);
-                sender.sendMessage(ChatColor.GREEN + "Konfigurationswert '" + path + "' auf " + value + " gesetzt.");
-            } else if (currentValue instanceof String) {
-                // Bei Strings mehrere Argumente zu einem String zusammenfügen
-                StringBuilder value = new StringBuilder(valueStr);
-                for (int i = 2; i < args.length; i++) {
-                    value.append(" ").append(args[i]);
-                }
-                plugin.getConfig().set(path, value.toString());
-                sender.sendMessage(ChatColor.GREEN + "Konfigurationswert '" + path + "' auf '" + value + "' gesetzt.");
-            } else if (currentValue instanceof List) {
-                // Listen werden nicht unterstützt
-                sender.sendMessage(ChatColor.RED + "Listen können nicht über diesen Befehl geändert werden.");
-                return true;
-            } else {
-                // Unbekannter Typ
-                sender.sendMessage(ChatColor.RED + "Der Typ des Konfigurationswerts wird nicht unterstützt.");
-                return true;
-            }
-
-            // Speichere die Konfiguration
-            plugin.saveConfig();
-
-            // Lade die Konfiguration neu, wenn nötig
-            if (path.startsWith("settings.") || path.equals("settings")) {
-                plugin.getConfigManager().reloadConfig();
-                sender.sendMessage(ChatColor.YELLOW + "Konfiguration neu geladen.");
-            }
-
-        } catch (NumberFormatException e) {
-            sender.sendMessage(ChatColor.RED + "Ungültiger Wert für den Typ des Konfigurationswerts.");
-            return true;
-        }
-
-        return true;
+    private void forceSyncData(CommandSender sender) {
+        sender.sendMessage(ChatColor.YELLOW + "Forcing data synchronization across all servers...");
+        plugin.forceSyncDataNow();
+        sender.sendMessage(ChatColor.GREEN + "Forced data synchronization triggered.");
     }
 
-    private boolean forceSyncData(CommandSender sender) {
-        sender.sendMessage(ChatColor.YELLOW + "Erzwinge Datensynchronisierung...");
+    private void checkBStats(CommandSender sender) {
+        sender.sendMessage(ChatColor.GREEN + "=== bStats Information ===");
+        sender.sendMessage(ChatColor.YELLOW + "Plugin ID: " + ChatColor.WHITE + "25161");
+        sender.sendMessage(ChatColor.YELLOW + "Server UUID: " + ChatColor.WHITE + plugin.getBStatsServerUUID());
 
-        if (plugin.getDatabaseManager().isFallbackMode()) {
-            sender.sendMessage(ChatColor.RED + "Plugin läuft im Fallback-Modus. Synchronisierung nicht möglich.");
-            return true;
+        // Show current metrics
+        sender.sendMessage(ChatColor.YELLOW + "Current Metrics:");
+        sender.sendMessage(ChatColor.YELLOW + "- Database Type: " + ChatColor.WHITE +
+                (plugin.getDatabaseManager() != null ?
+                        (plugin.getDatabaseManager().isFallbackMode() ? "SQLite" : "MySQL") :
+                        "Unknown"));
+
+        sender.sendMessage(ChatColor.YELLOW + "- Discord Integration: " + ChatColor.WHITE +
+                (plugin.getConfigManager() != null ?
+                        (plugin.getConfigManager().isEnableDiscordLogging() ? "Enabled" : "Disabled") :
+                        "Unknown"));
+
+        sender.sendMessage(ChatColor.YELLOW + "- Achievement System: " + ChatColor.WHITE +
+                (plugin.getAchievementManager() != null ?
+                        (plugin.getAchievementManager().isEnabled() ? "Enabled" : "Disabled") :
+                        "Unknown"));
+
+        sender.sendMessage(ChatColor.YELLOW + "- Blocks Mined Today: " + ChatColor.WHITE +
+                (plugin.getVeinMinerUtils() != null ?
+                        plugin.getVeinMinerUtils().getTotalBlocksMinedToday() :
+                        "0"));
+
+        sender.sendMessage(ChatColor.YELLOW + "- Active Players: " + ChatColor.WHITE +
+                plugin.getServer().getOnlinePlayers().size());
+
+        // Increment blocks mined for testing
+        if (plugin.getVeinMinerUtils() != null) {
+            plugin.getVeinMinerUtils().incrementBlocksMined(1);
+            sender.sendMessage(ChatColor.GREEN + "Incremented blocks mined counter by 1 for testing.");
         }
 
-        try {
-            plugin.forceSyncDataNow();
-            sender.sendMessage(ChatColor.GREEN + "Datensynchronisierung wurde erzwungen.");
-        } catch (Exception e) {
-            sender.sendMessage(ChatColor.RED + "Fehler bei der Datensynchronisierung: " + e.getMessage());
-            plugin.getLogger().severe("Fehler bei der Datensynchronisierung: " + e.getMessage());
-            e.printStackTrace();
-        }
+        sender.sendMessage(ChatColor.YELLOW + "Dashboard: " + ChatColor.WHITE +
+                "https://bstats.org/plugin/bukkit/VeinMiner/25161");
 
-        return true;
+        sender.sendMessage(ChatColor.GREEN + "Note: It may take up to 30 minutes for new data to appear on the dashboard.");
     }
 
-    private boolean reloadPlugin(CommandSender sender) {
-        sender.sendMessage(ChatColor.YELLOW + "Lade Plugin neu...");
-
-        try {
-            // Speichere alle Daten
-            plugin.getPlayerDataManager().saveAllData();
-
-            if (plugin.getAchievementManager().isEnabled()) {
-                plugin.getAchievementManager().saveAllAchievements();
-            }
-
-            // Lade Konfiguration neu
-            plugin.getConfigManager().reloadConfig();
-            plugin.getMessageManager().reloadMessages();
-
-            // Lade Achievements neu
-            if (plugin.getAchievementManager().isEnabled()) {
-                plugin.getAchievementManager().loadSettings();
-            }
-
-            // Lade Level-Einstellungen neu
-            plugin.getLevelManager().reloadLevelSettings();
-
-            // Starte Auto-Save-Task neu
-            plugin.restartAutoSaveTask();
-
-            sender.sendMessage(ChatColor.GREEN + "Plugin wurde neu geladen.");
-        } catch (Exception e) {
-            sender.sendMessage(ChatColor.RED + "Fehler beim Neuladen des Plugins: " + e.getMessage());
-            plugin.getLogger().severe("Fehler beim Neuladen des Plugins: " + e.getMessage());
-            e.printStackTrace();
-        }
-
-        return true;
+    private void sendHelp(CommandSender sender) {
+        sender.sendMessage(ChatColor.GREEN + "=== VeinMiner Admin Commands ===");
+        sender.sendMessage(ChatColor.YELLOW + "/vmadmin debug" + ChatColor.WHITE + " - Toggle debug mode");
+        sender.sendMessage(ChatColor.YELLOW + "/vmadmin reload" + ChatColor.WHITE + " - Reload configuration");
+        sender.sendMessage(ChatColor.YELLOW + "/vmadmin sync" + ChatColor.WHITE + " - Synchronize data");
+        sender.sendMessage(ChatColor.YELLOW + "/vmadmin forcesync" + ChatColor.WHITE + " - Force data synchronization");
+        sender.sendMessage(ChatColor.YELLOW + "/vmadmin bstats" + ChatColor.WHITE + " - Check bStats integration");
     }
 
-    private void showHelp(CommandSender sender) {
-        sender.sendMessage(ChatColor.GREEN + "=== VeinMiner Admin-Befehle ===");
-        sender.sendMessage(ChatColor.YELLOW + "/veinminer check " + ChatColor.WHITE + "- Überprüft die Datenbankverbindung");
-        sender.sendMessage(ChatColor.YELLOW + "/veinminer mysql reload " + ChatColor.WHITE + "- Lädt die MySQL-Verbindung neu");
-        sender.sendMessage(ChatColor.YELLOW + "/veinminer debug on|off " + ChatColor.WHITE + "- Aktiviert/Deaktiviert den Debug-Modus");
-        sender.sendMessage(ChatColor.YELLOW + "/veinminer config <pfad> <wert> " + ChatColor.WHITE + "- Ändert einen Konfigurationswert");
-        sender.sendMessage(ChatColor.YELLOW + "/veinminer sync " + ChatColor.WHITE + "- Erzwingt eine Datensynchronisierung");
-        sender.sendMessage(ChatColor.YELLOW + "/veinminer reload " + ChatColor.WHITE + "- Lädt das Plugin neu");
-        sender.sendMessage(ChatColor.YELLOW + "/veinminer help " + ChatColor.WHITE + "- Zeigt diese Hilfe an");
+    @Override
+    public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
+        if (!sender.hasPermission("veinminer.admin")) {
+            return new ArrayList<>();
+        }
+
+        if (args.length == 1) {
+            List<String> completions = Arrays.asList("debug", "reload", "sync", "forcesync", "bstats");
+            String input = args[0].toLowerCase();
+            return completions.stream()
+                    .filter(s -> s.startsWith(input))
+                    .collect(Collectors.toList());
+        }
+
+        return new ArrayList<>();
     }
 }

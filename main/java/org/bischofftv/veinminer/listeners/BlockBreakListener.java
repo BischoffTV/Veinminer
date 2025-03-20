@@ -4,6 +4,8 @@ import org.bischofftv.veinminer.Veinminer;
 import org.bischofftv.veinminer.utils.VeinMiningUtils;
 import org.bukkit.GameMode;
 import org.bukkit.Material;
+import org.bukkit.NamespacedKey;
+import org.bukkit.Registry;
 import org.bukkit.block.Block;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Player;
@@ -165,8 +167,13 @@ public class BlockBreakListener implements Listener {
 
         // Get enchantments from tool
         Map<Enchantment, Integer> enchantments = tool != null ? tool.getEnchantments() : new HashMap<>();
-        boolean hasSilkTouch = enchantments.containsKey(Enchantment.SILK_TOUCH);
-        int fortuneLevel = enchantments.getOrDefault(Enchantment.FORTUNE, 0);
+
+        // Use Registry to get enchantments
+        Enchantment silkTouchEnchant = Registry.ENCHANTMENT.get(NamespacedKey.minecraft("silk_touch"));
+        Enchantment fortuneEnchant = Registry.ENCHANTMENT.get(NamespacedKey.minecraft("fortune"));
+
+        boolean hasSilkTouch = tool != null && tool.getEnchantmentLevel(silkTouchEnchant) > 0;
+        int fortuneLevel = tool != null ? tool.getEnchantmentLevel(fortuneEnchant) : 0;
 
         // Process each connected block
         for (Block block : connectedBlocks) {
@@ -255,6 +262,11 @@ public class BlockBreakListener implements Listener {
         // Log mining activity
         plugin.getMiningLogger().logMiningActivity(player, blocksDestroyed, itemsCollected, enchantments);
 
+        // Update bStats counter
+        if (plugin.getVeinMinerUtils() != null) {
+            plugin.getVeinMinerUtils().incrementBlocksMined(blocksDestroyed);
+        }
+
         if (debug) {
             plugin.debug("[Debug] Vein mining completed for " + player.getName() +
                     ". Blocks destroyed: " + blocksDestroyed);
@@ -273,7 +285,9 @@ public class BlockBreakListener implements Listener {
         }
 
         // Apply unbreaking enchantment reduction
-        int unbreakingLevel = tool.getEnchantmentLevel(Enchantment.UNBREAKING);
+        Enchantment unbreakingEnchant = Registry.ENCHANTMENT.get(NamespacedKey.minecraft("unbreaking"));
+        int unbreakingLevel = tool.getEnchantmentLevel(unbreakingEnchant);
+
         if (unbreakingLevel > 0) {
             double reduction = 1.0 / (unbreakingLevel + 1);
             damage = (int) Math.ceil(damage * reduction);

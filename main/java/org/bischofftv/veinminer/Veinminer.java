@@ -14,6 +14,10 @@ import org.bischofftv.veinminer.logging.MiningLogger;
 import org.bischofftv.veinminer.utils.LevelManager;
 import org.bischofftv.veinminer.utils.MessageManager;
 import org.bischofftv.veinminer.utils.PlayerDataManager;
+import org.bischofftv.veinminer.utils.VeinMinerUtils;
+import org.bstats.bukkit.Metrics;
+import org.bstats.charts.SimplePie;
+import org.bstats.charts.SingleLineChart;
 import org.bukkit.Bukkit;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.TabCompleter;
@@ -41,6 +45,7 @@ public class Veinminer extends JavaPlugin {
     private MainGUI mainGUI;
     private BukkitTask autoSaveTask;
     private boolean debugMode;
+    private VeinMinerUtils veinMinerUtils;
 
     // Füge diese Felder und Methoden zur Veinminer-Klasse hinzu
     private AdminCommand adminCommand;
@@ -64,6 +69,53 @@ public class Veinminer extends JavaPlugin {
         // Initialize ConfigManager first
         this.configManager = new ConfigManager(this);
         configManager.loadConfig();
+
+        // Initialize VeinMinerUtils
+        this.veinMinerUtils = new VeinMinerUtils(this);
+
+        // Initialize bStats with explicit try-catch to see any errors
+        try {
+            getLogger().info("Initializing bStats metrics...");
+            // Create bStats metrics instance with plugin ID 25161
+            Metrics metrics = new Metrics(this, 25161);
+
+            // Add custom charts
+            metrics.addCustomChart(new SimplePie("database_type", () -> {
+                if (databaseManager != null) {
+                    return databaseManager.isFallbackMode() ? "SQLite" : "MySQL";
+                }
+                return "Unknown";
+            }));
+
+            metrics.addCustomChart(new SimplePie("discord_integration", () -> {
+                if (configManager != null) {
+                    return configManager.isEnableDiscordLogging() ? "Enabled" : "Disabled";
+                }
+                return "Unknown";
+            }));
+
+            metrics.addCustomChart(new SimplePie("achievement_system", () -> {
+                if (achievementManager != null) {
+                    return achievementManager.isEnabled() ? "Enabled" : "Disabled";
+                }
+                return "Unknown";
+            }));
+
+            metrics.addCustomChart(new SingleLineChart("blocks_mined", () -> {
+                if (veinMinerUtils != null) {
+                    return veinMinerUtils.getTotalBlocksMinedToday();
+                }
+                return 0;
+            }));
+
+            metrics.addCustomChart(new SingleLineChart("active_players", () ->
+                    Bukkit.getOnlinePlayers().size()));
+
+            getLogger().info("bStats metrics initialized successfully with plugin ID 25161");
+        } catch (Throwable e) {
+            getLogger().warning("Failed to initialize bStats: " + e.getMessage());
+            e.printStackTrace();
+        }
 
         // Check if debug mode is enabled
         this.debugMode = getConfig().getBoolean("settings.debug", false);
@@ -115,6 +167,14 @@ public class Veinminer extends JavaPlugin {
 
         // Füge diese Zeile zur onEnable-Methode hinzu, nach der Initialisierung der anderen Befehle
         adminCommand = new AdminCommand(this);
+
+        // Register the vmadmin command
+        if (getCommand("vmadmin") != null) {
+            getCommand("vmadmin").setExecutor(adminCommand);
+            getCommand("vmadmin").setTabCompleter(adminCommand);
+        } else {
+            getLogger().warning("Command 'vmadmin' not found in plugin.yml. Admin command will not be available.");
+        }
 
         // Load data for online players (in case of reload)
         getServer().getOnlinePlayers().forEach(player -> {
@@ -315,6 +375,10 @@ public class Veinminer extends JavaPlugin {
         return debugMode;
     }
 
+    public VeinMinerUtils getVeinMinerUtils() {
+        return veinMinerUtils;
+    }
+
     // Füge diese Getter-Methode hinzu
     public AdminCommand getAdminCommand() {
         return adminCommand;
@@ -410,5 +474,18 @@ public class Veinminer extends JavaPlugin {
                 getLogger().severe("Failed to update database schema: " + e.getMessage());
             }
         }
+    }
+
+    /**
+     * Get the bStats server UUID for this server
+     * @return The bStats server UUID or "Unknown" if not available
+     */
+    public String getBStatsServerUUID() {
+        File bStatsConfigFile = new File("plugins/bStats/config.yml");
+        if (bStatsConfigFile.exists()) {
+            YamlConfiguration bStatsConfig = YamlConfiguration.loadConfiguration(bStatsConfigFile);
+            return bStatsConfig.getString("serverUuid", "Unknown");
+        }
+        return "Unknown";
     }
 }
