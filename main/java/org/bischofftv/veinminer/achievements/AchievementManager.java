@@ -1,8 +1,9 @@
 package org.bischofftv.veinminer.achievements;
 
 import org.bischofftv.veinminer.Veinminer;
-import org.bischofftv.veinminer.database.DatabaseManager;
+import org.bischofftv.veinminer.data.PlayerData;
 import org.bukkit.Bukkit;
+import org.bukkit.ChatColor;
 import org.bukkit.Material;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Player;
@@ -12,1109 +13,650 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.*;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
-import org.bischofftv.veinminer.database.PlayerData;
-import org.bukkit.ChatColor;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
 
 public class AchievementManager {
 
     private final Veinminer plugin;
-    private final Map<String, Achievement> achievements;
-    private final Map<UUID, Map<String, PlayerAchievement>> playerAchievements;
     private boolean enabled;
     private boolean economyEnabled;
-    private String economyCommand;
-    private boolean debug;
+    private String giveMoneyCommand;
+
+    // Achievement definitions from config
+    private final Map<String, Map<String, Object>> achievementDefinitions;
+
+    // Player achievement data (UUID -> Achievement ID -> Progress)
+    private final Map<UUID, Map<String, Integer>> playerAchievements;
+
+    private final Map<UUID, Set<String>> claimedAchievements = new HashMap<>();
 
     public AchievementManager(Veinminer plugin) {
         this.plugin = plugin;
-        this.achievements = new HashMap<>();
-        this.playerAchievements = new ConcurrentHashMap<>();
+        this.achievementDefinitions = new HashMap<>();
+        this.playerAchievements = new HashMap<>();
+        loadConfig();
+    }
+
+    /**
+     * Load achievement system configuration
+     */
+    public void loadConfig() {
         loadSettings();
     }
 
+    // Update loadSettings method to properly load achievement icons from config
     public void loadSettings() {
-        this.enabled = plugin.getConfig().getBoolean("achievement-system.enabled", true);
-        this.economyEnabled = plugin.getConfig().getBoolean("economy.enabled", true);
-        this.economyCommand = plugin.getConfig().getString("economy.give-command", "eco give %player% %amount%");
-        this.debug = plugin.getConfig().getBoolean("settings.debug", false);
+        ConfigurationSection achievementSection = plugin.getConfig().getConfigurationSection("achievement-system");
 
-        // Speichere die vorhandenen Achievement-IDs, um später zu prüfen, ob neue hinzugefügt wurden
-        Set<String> existingAchievementIds = new HashSet<>(achievements.keySet());
+        if (achievementSection == null) {
+            plugin.getLogger().warning("Achievement system configuration not found. Using defaults.");
+            enabled = true;
+            economyEnabled = true;
+            giveMoneyCommand = "eco give %player% %amount%";
+        } else {
+            enabled = achievementSection.getBoolean("enabled", true);
+            plugin.getLogger().info("Achievement system is " + (enabled ? "enabled" : "disabled"));
+        }
 
-        // Leere die vorhandenen Achievements, aber behalte die Spielerdaten
-        achievements.clear();
+        // Load economy settings
+        ConfigurationSection economySection = plugin.getConfig().getConfigurationSection("economy");
+        if (economySection != null) {
+            economyEnabled = economySection.getBoolean("enabled", true);
+            giveMoneyCommand = economySection.getString("give-command", "eco give %player% %amount%");
+        } else {
+            economyEnabled = true;
+            giveMoneyCommand = "eco give %player% %amount%";
+        }
 
-        // Lade Achievements aus der Konfiguration
+        // Load achievement definitions
+        achievementDefinitions.clear();
         ConfigurationSection achievementsSection = plugin.getConfig().getConfigurationSection("achievements");
         if (achievementsSection != null) {
-            for (String id : achievementsSection.getKeys(false)) {
-                ConfigurationSection section = achievementsSection.getConfigurationSection(id);
-                if (section != null) {
-                    String name = section.getString("name", id);
-                    String description = section.getString("description", "");
-                    String type = section.getString("type", "BLOCK_MINE");
-                    String block = section.getString("block", "");
-                    int amount = section.getInt("amount", 1);
+            plugin.getLogger().info("Loading achievements from config.yml...");
+            for (String achievementId : achievementsSection.getKeys(false)) {
+                ConfigurationSection achievementConfig = achievementsSection.getConfigurationSection(achievementId);
+                if (achievementConfig != null) {
+                    Map<String, Object> achievementData = new HashMap<>();
 
-                    // Lade Belohnungen
-                    ConfigurationSection rewardsSection = section.getConfigurationSection("rewards");
-                    int money = 0;
-                    List<String> items = new ArrayList<>();
+                    // Basic achievement data
+                    achievementData.put("name", achievementConfig.getString("name", "Unknown Achievement"));
+                    achievementData.put("description", achievementConfig.getString("description", "No description"));
+                    achievementData.put("type", achievementConfig.getString("type", "UNKNOWN"));
+                    achievementData.put("amount", achievementConfig.getInt("amount", 1));
 
+                    // Type-specific data
+                    if (achievementConfig.getString("type", "").equals("BLOCK_MINE")) {
+                        achievementData.put("block", achievementConfig.getString("block", "STONE"));
+                    }
+
+                    // Icon setting
+                    if (achievementConfig.contains("icon")) {
+                        achievementData.put("icon", achievementConfig.getString("icon"));
+                    }
+
+                    // Rewards
+                    ConfigurationSection rewardsSection = achievementConfig.getConfigurationSection("rewards");
                     if (rewardsSection != null) {
-                        money = rewardsSection.getInt("money", 0);
-                        items = rewardsSection.getStringList("items");
+                        Map<String, Object> rewards = new HashMap<>();
+
+                        if (rewardsSection.contains("money")) {
+                            rewards.put("money", rewardsSection.getDouble("money"));
+                        }
+
+                        if (rewardsSection.contains("items")) {
+                            rewards.put("items", rewardsSection.getStringList("items"));
+                        }
+
+                        achievementData.put("rewards", rewards);
                     }
 
-                    Achievement achievement = new Achievement(id, name, description, type, block, amount, money, items);
-                    achievements.put(id, achievement);
-
-                    if (debug) {
-                        plugin.debug("[Debug] Loaded achievement: " + id + " - " + name +
-                                " (Type: " + type + ", Block: " + block + ", Amount: " + amount + ")");
-                    }
-
-                    // Entferne die ID aus der Liste der vorhandenen Achievements
-                    existingAchievementIds.remove(id);
+                    achievementDefinitions.put(achievementId, achievementData);
+                    plugin.getLogger().info("Loaded achievement: " + achievementId + " - " + achievementData.get("name"));
                 }
             }
         }
 
-        // Überprüfe, ob neue Achievements hinzugefügt wurden
-        if (!existingAchievementIds.isEmpty()) {
-            plugin.getLogger().info("Es wurden " + existingAchievementIds.size() + " Achievements aus der Konfiguration entfernt.");
-        }
+        plugin.getLogger().info("Loaded " + achievementDefinitions.size() + " achievement definitions.");
 
-        // Überprüfe, ob neue Achievements hinzugefügt wurden
-        Set<String> newAchievementIds = new HashSet<>(achievements.keySet());
-        newAchievementIds.removeAll(existingAchievementIds);
-
-        if (!newAchievementIds.isEmpty()) {
-            plugin.getLogger().info("Es wurden " + newAchievementIds.size() + " neue Achievements hinzugefügt.");
-
-            // Initialisiere die neuen Achievements für alle Spieler
-            initializeNewAchievements(newAchievementIds);
-
-            // Force a database sync to ensure changes are propagated
-            plugin.forceSyncDataNow();
-
-            // Reload achievements for all online players to include the new ones
-            for (Player player : Bukkit.getOnlinePlayers()) {
-                UUID uuid = player.getUniqueId();
-                // Clear existing achievement data for this player to force a reload
-                playerAchievements.remove(uuid);
-                // Load achievements again
-                loadPlayerAchievements(player);
-
-                if (debug) {
-                    plugin.debug("[Debug] Reloaded achievements for " + player.getName() + " after adding new achievements");
-                }
-            }
-        }
-
-        if (debug) {
-            plugin.debug("[Debug] Loaded " + achievements.size() + " achievements");
-        }
+        // Update database schema if needed - this ensures new achievements will be properly tracked
+        plugin.getDatabaseManager().updateAchievementSchema();
     }
 
-    private void initializeNewAchievements(Set<String> newAchievementIds) {
-        if (newAchievementIds.isEmpty()) {
-            return;
-        }
-
-        // Initialisiere die neuen Achievements für alle Spieler in der Datenbank
-        if (!plugin.getDatabaseManager().isFallbackMode()) {
-            Connection conn = null;
-            try {
-                conn = plugin.getDatabaseManager().getConnection();
-                if (conn == null) {
-                    plugin.getLogger().warning("Konnte keine Verbindung zur Datenbank herstellen. Neue Achievements werden nicht initialisiert.");
-                    return;
-                }
-
-                // Hole alle Spieler-UUIDs aus der Datenbank
-                List<UUID> playerUUIDs = new ArrayList<>();
-                try (PreparedStatement ps = conn.prepareStatement(
-                        "SELECT uuid FROM " + plugin.getDatabaseManager().getTablePrefix() + "players")) {
-                    ResultSet rs = ps.executeQuery();
-
-                    while (rs.next()) {
-                        try {
-                            UUID uuid = UUID.fromString(rs.getString("uuid"));
-                            playerUUIDs.add(uuid);
-                        } catch (IllegalArgumentException e) {
-                            plugin.getLogger().warning("Ungültige UUID in der Datenbank: " + rs.getString("uuid"));
-                        }
-                    }
-                }
-
-                if (playerUUIDs.isEmpty()) {
-                    plugin.getLogger().info("Keine Spieler in der Datenbank gefunden. Neue Achievements werden nicht initialisiert.");
-                    return;
-                }
-
-                // Initialisiere die neuen Achievements für jeden Spieler
-                int initializedCount = 0;
-                for (UUID uuid : playerUUIDs) {
-                    for (String achievementId : newAchievementIds) {
-                        try (PreparedStatement ps = conn.prepareStatement(
-                                "INSERT IGNORE INTO " + plugin.getDatabaseManager().getTablePrefix() +
-                                        "achievements (uuid, achievement_id, progress, claimed) VALUES (?, ?, 0, false)")) {
-                            ps.setString(1, uuid.toString());
-                            ps.setString(2, achievementId);
-                            ps.executeUpdate();
-                            initializedCount++;
-                        } catch (SQLException e) {
-                            plugin.getLogger().warning("Fehler beim Initialisieren des Achievements " + achievementId + " für " + uuid + ": " + e.getMessage());
-                        }
-                    }
-                }
-
-                plugin.getLogger().info("Initialisierte " + initializedCount + " neue Achievement-Einträge für " + playerUUIDs.size() + " Spieler.");
-            } catch (SQLException e) {
-                plugin.getLogger().severe("Fehler beim Initialisieren neuer Achievements: " + e.getMessage());
-            } finally {
-                if (conn != null) {
-                    try {
-                        conn.close();
-                    } catch (SQLException e) {
-                        // Ignore
-                    }
-                }
-            }
-        }
-
-        // Also initialize the new achievements for all online players in the cache
-        for (Player player : Bukkit.getOnlinePlayers()) {
-            UUID uuid = player.getUniqueId();
-            Map<String, PlayerAchievement> playerAchievementMap = playerAchievements.get(uuid);
-
-            if (playerAchievementMap != null) {
-                boolean achievementsAdded = false;
-                for (String achievementId : newAchievementIds) {
-                    if (!playerAchievementMap.containsKey(achievementId)) {
-                        PlayerAchievement playerAchievement = new PlayerAchievement(achievementId, 0, false);
-                        playerAchievementMap.put(achievementId, playerAchievement);
-                        achievementsAdded = true;
-
-                        if (debug) {
-                            plugin.debug("[Debug] Initialized new achievement " + achievementId + " for online player " + player.getName());
-                        }
-
-                        // Also save to database immediately
-                        saveAchievement(player.getUniqueId(), achievementId, 0, false);
-                    }
-                }
-
-                if (achievementsAdded) {
-                    // Notify the player about new achievements
-                    player.sendMessage(ChatColor.GREEN + "New achievements have been added! Check the achievements menu.");
-                }
-            }
-        }
+    /**
+     * Clear all player achievements from memory (not from database)
+     */
+    public void clearPlayerAchievements() {
+        playerAchievements.clear();
     }
 
+    /**
+     * Check if the achievement system is enabled
+     * @return True if the achievement system is enabled, false otherwise
+     */
     public boolean isEnabled() {
         return enabled;
     }
 
-    public boolean isEconomyEnabled() {
-        return this.economyEnabled;
-    }
+    /**
+     * Get player achievements
+     * @param player The player
+     * @return A map of achievement IDs to progress
+     */
+    public Map<String, Integer> getPlayerAchievements(Player player) {
+        UUID playerUUID = player.getUniqueId();
 
-    public Collection<Achievement> getAchievements() {
-        return achievements.values();
-    }
-
-    public Achievement getAchievement(String id) {
-        return achievements.get(id);
-    }
-
-    public void loadPlayerAchievements(Player player) {
-        if (!enabled) {
-            return;
+        // Check if player achievements are already loaded
+        if (!playerAchievements.containsKey(playerUUID)) {
+            loadPlayerAchievements(player);
         }
 
-        UUID uuid = player.getUniqueId();
-
-        // Clear existing data for this player
-        playerAchievements.remove(uuid);
-
-        if (debug) {
-            plugin.debug("[Debug] Loading achievements for " + player.getName());
-        }
-
-        // Add a method to force immediate, synchronous loading for critical scenarios
-        if (Bukkit.isPrimaryThread()) {
-            loadPlayerAchievementsSynchronously(player);
-            return;
-        }
-
-        // Load from database asynchronously
-        CompletableFuture.runAsync(() -> {
-            Connection conn = null;
-            try {
-                Map<String, PlayerAchievement> playerAchievementMap = new HashMap<>();
-
-                // Create table if it doesn't exist
-                createAchievementsTable();
-
-                // Load player achievements directly with retry logic
-                boolean loaded = false;
-                int attempts = 0;
-
-                while (!loaded && attempts < 3) {
-                    attempts++;
-
-                    try {
-                        conn = plugin.getDatabaseManager().getConnection();
-                        if (conn == null) {
-                            plugin.getLogger().warning("Could not load achievements for " + player.getName() + ": Database connection is null (attempt " + attempts + ")");
-                            Thread.sleep(500); // Wait before retry
-                            continue;
-                        }
-
-                        try (PreparedStatement ps = conn.prepareStatement(
-                                "SELECT * FROM " + plugin.getDatabaseManager().getTablePrefix() + "achievements WHERE uuid = ?")) {
-
-                            ps.setString(1, uuid.toString());
-                            ResultSet rs = ps.executeQuery();
-
-                            int achievementsLoaded = 0;
-                            while (rs.next()) {
-                                String achievementId = rs.getString("achievement_id");
-                                int progress = rs.getInt("progress");
-                                boolean claimed = rs.getBoolean("claimed");
-
-                                PlayerAchievement playerAchievement = new PlayerAchievement(achievementId, progress, claimed);
-                                playerAchievementMap.put(achievementId, playerAchievement);
-                                achievementsLoaded++;
-
-                                if (debug) {
-                                    plugin.debug("[Debug] Loaded achievement for " + player.getName() + ": " +
-                                            achievementId + ", Progress: " + progress + ", Claimed: " + claimed);
-                                }
-                            }
-
-                            if (debug) {
-                                plugin.debug("[Debug] Loaded " + achievementsLoaded + " achievements for " + player.getName());
-                            }
-
-                            // Mark as successfully loaded
-                            loaded = true;
-                        }
-                    } catch (SQLException e) {
-                        plugin.getLogger().warning("Error loading achievements for " + player.getName() + " (attempt " + attempts + "): " + e.getMessage());
-                        Thread.sleep(1000); // Wait longer before next retry
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                        plugin.getLogger().warning("Achievement loading thread interrupted for " + player.getName());
-                    } finally {
-                        if (conn != null) {
-                            try {
-                                conn.close();
-                            } catch (SQLException e) {
-                                // Ignore
-                            }
-                            conn = null;
-                        }
-                    }
-                }
-
-                // Initialize achievements that don't exist in the database
-                int newAchievements = 0;
-                for (String achievementId : achievements.keySet()) {
-                    if (!playerAchievementMap.containsKey(achievementId)) {
-                        PlayerAchievement playerAchievement = new PlayerAchievement(achievementId, 0, false);
-                        playerAchievementMap.put(achievementId, playerAchievement);
-                        newAchievements++;
-
-                        // Insert into database
-                        try {
-                            conn = plugin.getDatabaseManager().getConnection();
-                            if (conn != null) {
-                                try (PreparedStatement ps = conn.prepareStatement(
-                                        "INSERT INTO " + plugin.getDatabaseManager().getTablePrefix() +
-                                                "achievements (uuid, achievement_id, progress, claimed) VALUES (?, ?, 0, false)")) {
-
-                                    ps.setString(1, uuid.toString());
-                                    ps.setString(2, achievementId);
-                                    ps.executeUpdate();
-                                }
-                            }
-                        } catch (SQLException e) {
-                            plugin.getLogger().warning("Error initializing achievement " + achievementId + " for " + player.getName() + ": " + e.getMessage());
-                        } finally {
-                            if (conn != null) {
-                                try {
-                                    conn.close();
-                                } catch (SQLException e) {
-                                    // Ignore
-                                }
-                                conn = null;
-                            }
-                        }
-                    }
-                }
-
-                if (debug && newAchievements > 0) {
-                    plugin.debug("[Debug] Initialized " + newAchievements + " new achievements for " + player.getName());
-                }
-
-                // Store in cache
-                playerAchievements.put(uuid, playerAchievementMap);
-
-                // Check level achievements immediately after loading
-                checkLevelAchievements(player);
-
-                if (debug) {
-                    plugin.debug("[Debug] Achievement loading completed for " + player.getName());
-                    plugin.debug("[Debug] Total achievements in cache: " + playerAchievementMap.size());
-                }
-
-            } catch (Exception e) {
-                plugin.getLogger().severe("Error loading achievements for " + player.getName() + ": " + e.getMessage());
-                e.printStackTrace();
-
-                // Create default achievement data if loading failed
-                Map<String, PlayerAchievement> tempAchievements = new HashMap<>();
-                for (String achievementId : achievements.keySet()) {
-                    tempAchievements.put(achievementId, new PlayerAchievement(achievementId, 0, false));
-                }
-
-                // Store in cache
-                playerAchievements.put(uuid, tempAchievements);
-            } finally {
-                if (conn != null) {
-                    try {
-                        conn.close();
-                    } catch (SQLException e) {
-                        // Ignore
-                    }
-                }
-            }
-        });
+        return playerAchievements.getOrDefault(playerUUID, new HashMap<>());
     }
 
-    private void loadPlayerAchievementsSynchronously(Player player) {
-        UUID uuid = player.getUniqueId();
+    /**
+     * Check if an achievement has been claimed by a player
+     * @param player The player
+     * @param achievementId The achievement ID
+     * @return True if the achievement has been claimed, false otherwise
+     */
+    public boolean hasClaimedAchievement(Player player, String achievementId) {
+        UUID playerUUID = player.getUniqueId();
+        if (!claimedAchievements.containsKey(playerUUID)) {
+            claimedAchievements.put(playerUUID, new HashSet<>());
+        }
+        return claimedAchievements.get(playerUUID).contains(achievementId);
+    }
 
-        Connection conn = null;
+    /**
+     * Mark an achievement as claimed by a player
+     * @param player The player
+     * @param achievementId The achievement ID
+     */
+    public void markAchievementClaimed(Player player, String achievementId) {
+        UUID playerUUID = player.getUniqueId();
+        if (!claimedAchievements.containsKey(playerUUID)) {
+            claimedAchievements.put(playerUUID, new HashSet<>());
+        }
+        claimedAchievements.get(playerUUID).add(achievementId);
+
+        // Save to database
         try {
-            Map<String, PlayerAchievement> playerAchievementMap = new HashMap<>();
-
-            // Create table if it doesn't exist
-            createAchievementsTable();
-
-            // Load player achievements
-            try {
-                conn = plugin.getDatabaseManager().getConnection();
-                if (conn == null) {
-                    plugin.getLogger().warning("Could not load achievements synchronously for " + player.getName() + ": Database connection is null");
-
-                    // Create default achievement data
-                    for (String achievementId : achievements.keySet()) {
-                        playerAchievementMap.put(achievementId, new PlayerAchievement(achievementId, 0, false));
-                    }
-                    playerAchievements.put(uuid, playerAchievementMap);
-                    return;
-                }
-
-                try (PreparedStatement ps = conn.prepareStatement(
-                        "SELECT * FROM " + plugin.getDatabaseManager().getTablePrefix() + "achievements WHERE uuid = ?")) {
-
-                    ps.setString(1, uuid.toString());
-                    ResultSet rs = ps.executeQuery();
-
-                    int achievementsLoaded = 0;
-                    while (rs.next()) {
-                        String achievementId = rs.getString("achievement_id");
-                        int progress = rs.getInt("progress");
-                        boolean claimed = rs.getBoolean("claimed");
-
-                        PlayerAchievement playerAchievement = new PlayerAchievement(achievementId, progress, claimed);
-                        playerAchievementMap.put(achievementId, playerAchievement);
-                        achievementsLoaded++;
-                    }
-
-                    if (debug) {
-                        plugin.debug("[Debug] Synchronously loaded " + achievementsLoaded + " achievements for " + player.getName());
-                    }
-                }
-            } finally {
-                if (conn != null) {
-                    try {
-                        conn.close();
-                    } catch (SQLException e) {
-                        // Ignore
-                    }
-                    conn = null;
-                }
-            }
-
-            // Initialize achievements that don't exist in the database
-            for (String achievementId : achievements.keySet()) {
-                if (!playerAchievementMap.containsKey(achievementId)) {
-                    playerAchievementMap.put(achievementId, new PlayerAchievement(achievementId, 0, false));
-                }
-            }
-
-            // Store in cache
-            playerAchievements.put(uuid, playerAchievementMap);
-
-            // Don't check level achievements here to avoid recursion
-        } catch (Exception e) {
-            plugin.getLogger().severe("Error loading achievements synchronously for " + player.getName() + ": " + e.getMessage());
-
-            // Create default achievement data if loading failed
-            Map<String, PlayerAchievement> defaultAchievements = new HashMap<>();
-            for (String achievementId : achievements.keySet()) {
-                defaultAchievements.put(achievementId, new PlayerAchievement(achievementId, 0, false));
-            }
-
-            // Store in cache
-            playerAchievements.put(uuid, defaultAchievements);
-        } finally {
-            if (conn != null) {
-                try {
-                    conn.close();
-                } catch (SQLException e) {
-                    // Ignore
-                }
-            }
-        }
-    }
-
-    private void createAchievementsTable() throws SQLException {
-        Connection conn = null;
-        try {
-            conn = plugin.getDatabaseManager().getConnection();
-            if (conn == null) return;
-
-            try (PreparedStatement ps = conn.prepareStatement(
-                    "CREATE TABLE IF NOT EXISTS " + plugin.getDatabaseManager().getTablePrefix() + "achievements (" +
-                            "uuid VARCHAR(36) NOT NULL, " +
-                            "achievement_id VARCHAR(64) NOT NULL, " +
-                            "progress INT NOT NULL DEFAULT 0, " +
-                            "claimed BOOLEAN NOT NULL DEFAULT false, " +
-                            "PRIMARY KEY (uuid, achievement_id), " +
-                            "FOREIGN KEY (uuid) REFERENCES " + plugin.getDatabaseManager().getTablePrefix() +
-                            "players(uuid) ON DELETE CASCADE)")) {
-
-                ps.executeUpdate();
-            }
-        } finally {
-            if (conn != null) {
-                try {
-                    conn.close();
-                } catch (SQLException e) {
-                    // Ignore
-                }
-            }
-        }
-    }
-
-    public void savePlayerAchievements(Player player) {
-        if (!enabled) {
-            return;
-        }
-
-        UUID uuid = player.getUniqueId();
-        Map<String, PlayerAchievement> playerAchievementMap = playerAchievements.get(uuid);
-
-        if (playerAchievementMap == null) {
-            return;
-        }
-
-        if (debug) {
-            plugin.debug("[Debug] Saving achievements for " + player.getName());
-        }
-
-        // Speichere direkt in der Datenbank, um sicherzustellen, dass die Änderungen sofort übernommen werden
-        Connection conn = null;
-        try {
-            conn = plugin.getDatabaseManager().getConnection();
-            if (conn == null) {
-                plugin.getLogger().warning("Could not save achievements for " + player.getName() + ": Database connection is null");
-                return;
-            }
-
-            try (PreparedStatement ps = conn.prepareStatement(
-                    "INSERT INTO " + plugin.getDatabaseManager().getTablePrefix() +
-                            "achievements (uuid, achievement_id, progress, claimed) VALUES (?, ?, ?, ?) " +
-                            "ON DUPLICATE KEY UPDATE progress = ?, claimed = ?")) {
-
-                int updatedCount = 0;
-                for (Map.Entry<String, PlayerAchievement> entry : playerAchievementMap.entrySet()) {
-                    PlayerAchievement playerAchievement = entry.getValue();
-
-                    ps.setString(1, uuid.toString());
-                    ps.setString(2, playerAchievement.getAchievementId());
-                    ps.setInt(3, playerAchievement.getProgress());
-                    ps.setBoolean(4, playerAchievement.isClaimed());
-                    ps.setInt(5, playerAchievement.getProgress());
-                    ps.setBoolean(6, playerAchievement.isClaimed());
-                    ps.addBatch();
-
-                    if (debug) {
-                        plugin.debug("[Debug] Batched achievement for " + player.getName() + ": " +
-                                playerAchievement.getAchievementId() + ", Progress: " +
-                                playerAchievement.getProgress() + ", Claimed: " +
-                                playerAchievement.isClaimed());
-                    }
-                    updatedCount++;
-                }
-
-                int[] results = ps.executeBatch();
-
-                if (debug) {
-                    plugin.debug("[Debug] Saved " + updatedCount + " achievements for " + player.getName());
-                }
-
-                // Trigger synchronization to other servers
-                plugin.forceSyncDataNow();
+            Connection connection = plugin.getDatabaseManager().getConnection();
+            if (connection != null) {
+                String sql = "UPDATE " + plugin.getDatabaseManager().getTablePrefix() + "achievements " +
+                        "SET claimed = ? WHERE uuid = ? AND achievement_id = ?";
+                PreparedStatement statement = connection.prepareStatement(sql);
+                statement.setBoolean(1, true);
+                statement.setString(2, playerUUID.toString());
+                statement.setString(3, achievementId);
+                statement.executeUpdate();
+                statement.close();
             }
         } catch (SQLException e) {
-            plugin.getLogger().severe("Error saving achievements for " + player.getName() + ": " + e.getMessage());
-            e.printStackTrace();
-        } finally {
-            if (conn != null) {
-                try {
-                    conn.close();
-                } catch (SQLException e) {
-                    // Ignore
+            plugin.getLogger().warning("Failed to save claimed achievement: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Load claimed achievements for a player
+     * @param player The player
+     */
+    public void loadClaimedAchievements(Player player) {
+        UUID playerUUID = player.getUniqueId();
+        Set<String> claimed = new HashSet<>();
+
+        try {
+            Connection connection = plugin.getDatabaseManager().getConnection();
+            if (connection != null) {
+                String sql = "SELECT achievement_id FROM " + plugin.getDatabaseManager().getTablePrefix() +
+                        "achievements WHERE uuid = ? AND claimed = ?";
+                PreparedStatement statement = connection.prepareStatement(sql);
+                statement.setString(1, playerUUID.toString());
+                statement.setBoolean(2, true);
+                ResultSet resultSet = statement.executeQuery();
+
+                while (resultSet.next()) {
+                    claimed.add(resultSet.getString("achievement_id"));
                 }
+
+                resultSet.close();
+                statement.close();
+            }
+        } catch (SQLException e) {
+            plugin.getLogger().warning("Failed to load claimed achievements: " + e.getMessage());
+        }
+
+        claimedAchievements.put(playerUUID, claimed);
+    }
+
+    /**
+     * Load player achievements from the database
+     * @param player The player
+     */
+    public void loadPlayerAchievements(Player player) {
+        UUID playerUUID = player.getUniqueId();
+
+        // Create empty achievement map
+        Map<String, Integer> achievements = new HashMap<>();
+
+        // Try to load from database
+        try {
+            Map<String, Integer> dbAchievements = plugin.getDatabaseManager().loadPlayerAchievements(player);
+            achievements.putAll(dbAchievements);
+            plugin.getLogger().info("Loaded " + dbAchievements.size() + " achievements for player " + player.getName());
+
+            // Also load claimed achievements
+            loadClaimedAchievements(player);
+        } catch (Exception e) {
+            plugin.getLogger().warning("Failed to load achievements for " + player.getName() + ": " + e.getMessage());
+            if (plugin.isDebugMode()) {
+                e.printStackTrace();
+            }
+        }
+
+        // Store player achievements
+        playerAchievements.put(playerUUID, achievements);
+    }
+
+    /**
+     * Save player achievements to the database
+     * @param player The player
+     */
+    public void savePlayerAchievements(Player player) {
+        UUID playerUUID = player.getUniqueId();
+
+        // Check if player achievements are loaded
+        if (!playerAchievements.containsKey(playerUUID)) {
+            return;
+        }
+
+        Map<String, Integer> achievements = playerAchievements.get(playerUUID);
+
+        // Try to save to database
+        try {
+            Connection connection = plugin.getDatabaseManager().getConnection();
+            if (connection != null) {
+                for (Map.Entry<String, Integer> entry : achievements.entrySet()) {
+                    String achievementId = entry.getKey();
+                    int progress = entry.getValue();
+
+                    String sql = "INSERT INTO " + plugin.getDatabaseManager().getTablePrefix() + "achievements " +
+                            "(uuid, achievement_id, progress, completed) " +
+                            "VALUES (?, ?, ?, ?) " +
+                            "ON DUPLICATE KEY UPDATE " +
+                            "progress = ?, completed = ?";
+
+                    PreparedStatement statement = connection.prepareStatement(sql);
+
+                    // Get required amount for completion
+                    int requiredAmount = 1;
+                    if (achievementDefinitions.containsKey(achievementId)) {
+                        requiredAmount = (int) achievementDefinitions.get(achievementId).get("amount");
+                    }
+
+                    boolean completed = progress >= requiredAmount;
+
+                    // Insert values
+                    statement.setString(1, playerUUID.toString());
+                    statement.setString(2, achievementId);
+                    statement.setInt(3, progress);
+                    statement.setBoolean(4, completed);
+
+                    // Update values
+                    statement.setInt(5, progress);
+                    statement.setBoolean(6, completed);
+
+                    statement.executeUpdate();
+                    statement.close();
+
+                    // Notify other servers about the update
+                    plugin.getDatabaseManager().notifyAchievementUpdate(player, achievementId, progress);
+                }
+            }
+        } catch (SQLException e) {
+            plugin.getLogger().warning("Failed to save achievements for " + player.getName() + ": " + e.getMessage());
+            if (plugin.isDebugMode()) {
+                e.printStackTrace();
             }
         }
     }
 
+    /**
+     * Save all player achievements
+     */
     public void saveAllAchievements() {
-        if (!enabled) {
-            return;
-        }
-
-        for (Player player : Bukkit.getOnlinePlayers()) {
+        for (Player player : plugin.getServer().getOnlinePlayers()) {
             savePlayerAchievements(player);
         }
     }
 
-    public Map<String, PlayerAchievement> getPlayerAchievements(Player player) {
-        UUID uuid = player.getUniqueId();
-        return playerAchievements.getOrDefault(uuid, new HashMap<>());
-    }
-
-    public PlayerAchievement getPlayerAchievement(Player player, String achievementId) {
-        UUID uuid = player.getUniqueId();
-        Map<String, PlayerAchievement> playerAchievementMap = playerAchievements.get(uuid);
-
-        if (playerAchievementMap == null) {
-            return null;
-        }
-
-        return playerAchievementMap.get(achievementId);
-    }
-
-    // Updated method to properly track block mining achievements
+    /**
+     * Update block mine progress for a player
+     * @param player The player
+     * @param blockType The block type
+     * @param amount The amount to add
+     */
     public void updateBlockMineProgress(Player player, Material blockType, int amount) {
         if (!enabled) {
             return;
         }
 
-        UUID uuid = player.getUniqueId();
-        Map<String, PlayerAchievement> playerAchievementMap = playerAchievements.get(uuid);
+        UUID playerUUID = player.getUniqueId();
 
-        if (playerAchievementMap == null) {
-            if (debug) {
-                plugin.debug("[Debug] No achievement data found for " + player.getName() +
-                        " when updating block progress for " + blockType);
-            }
-            return;
+        // Check if player achievements are loaded
+        if (!playerAchievements.containsKey(playerUUID)) {
+            loadPlayerAchievements(player);
         }
 
-        String blockName = blockType.name();
+        Map<String, Integer> achievements = playerAchievements.get(playerUUID);
 
-        if (debug) {
-            plugin.debug("[Debug] Checking block mining achievements for " + player.getName() +
-                    " - Block: " + blockName + ", Amount: " + amount);
-        }
+        // Find matching achievements
+        for (Map.Entry<String, Map<String, Object>> entry : achievementDefinitions.entrySet()) {
+            String achievementId = entry.getKey();
+            Map<String, Object> achievementData = entry.getValue();
 
-        for (Achievement achievement : achievements.values()) {
-            if (achievement.getType().equalsIgnoreCase("BLOCK_MINE")) {
-                String[] blocks = achievement.getBlock().split(",");
-                boolean matchesBlock = false;
+            // Check if this is a block mine achievement
+            if (achievementData.get("type").equals("BLOCK_MINE")) {
+                String blockString = (String) achievementData.get("block");
+                String[] blocks = blockString.split(",");
 
+                // Check if the block type matches
                 for (String block : blocks) {
-                    String trimmedBlock = block.trim();
-                    if (trimmedBlock.equalsIgnoreCase(blockName)) {
-                        matchesBlock = true;
-                        if (debug) {
-                            plugin.debug("[Debug] Block " + blockName + " matches achievement " +
-                                    achievement.getId() + " (" + trimmedBlock + ")");
-                        }
-                        break;
-                    }
-                }
+                    if (blockType.name().equals(block.trim())) {
+                        // Update progress
+                        int currentProgress = achievements.getOrDefault(achievementId, 0);
+                        int requiredAmount = (int) achievementData.get("amount");
+                        // Only increment if not already completed
+                        if (currentProgress < requiredAmount) {
+                            int newProgress = Math.min(currentProgress + amount, requiredAmount);
+                            achievements.put(achievementId, newProgress);
 
-                if (matchesBlock) {
-                    PlayerAchievement playerAchievement = playerAchievementMap.get(achievement.getId());
-
-                    if (playerAchievement != null && !playerAchievement.isClaimed()) {
-                        int oldProgress = playerAchievement.getProgress();
-                        int newProgress = Math.min(oldProgress + amount, achievement.getAmount());
-                        playerAchievement.setProgress(newProgress);
-
-                        if (debug) {
-                            plugin.debug("[Debug] Updated progress for " + player.getName() +
-                                    " on achievement " + achievement.getId() +
-                                    ": " + oldProgress + " -> " + newProgress);
-                        }
-
-                        // Check if progress has been made
-                        if (newProgress > oldProgress) {
                             // Check if achievement is completed
-                            if (newProgress == achievement.getAmount() && oldProgress < achievement.getAmount()) {
+                            if (currentProgress < requiredAmount && newProgress >= requiredAmount) {
                                 // Achievement completed
-                                Map<String, String> placeholders = new HashMap<>();
-                                placeholders.put("name", achievement.getName());
-                                player.sendMessage(plugin.getMessageManager().getMessage("messages.achievements.progress.completed", placeholders));
-
-                                // Notify other servers about this significant progress
-                                plugin.getDatabaseManager().notifyAchievementUpdate(uuid, achievement.getId());
-                            } else if (newProgress % (achievement.getAmount() / 4) == 0 ||
-                                    (newProgress == achievement.getAmount() / 2)) {
-                                // Progress update (at 25%, 50%, 75%)
-                                Map<String, String> placeholders = new HashMap<>();
-                                placeholders.put("name", achievement.getName());
-                                placeholders.put("progress", String.valueOf(newProgress));
-                                placeholders.put("total", String.valueOf(achievement.getAmount()));
-                                player.sendMessage(plugin.getMessageManager().getMessage("messages.achievements.progress.updated", placeholders));
-
-                                // For significant milestones, also notify other servers
-                                plugin.getDatabaseManager().notifyAchievementUpdate(uuid, achievement.getId());
+                                completeAchievement(player, achievementId, achievementData);
                             }
+                        } else {
+                            // Already completed, no need to update progress
+                            achievements.put(achievementId, requiredAmount);
                         }
+
+                        break;
                     }
                 }
             }
         }
     }
 
+    /**
+     * Update total blocks progress for a player
+     * @param player The player
+     * @param amount The amount to add
+     */
     public void updateTotalBlocksProgress(Player player, int amount) {
         if (!enabled) {
             return;
         }
 
-        UUID uuid = player.getUniqueId();
-        Map<String, PlayerAchievement> playerAchievementMap = playerAchievements.get(uuid);
+        UUID playerUUID = player.getUniqueId();
 
-        if (playerAchievementMap == null) {
-            if (debug) {
-                plugin.debug("[Debug] No achievement data found for " + player.getName() +
-                        " when updating total blocks progress");
-            }
-            return;
+        // Check if player achievements are loaded
+        if (!playerAchievements.containsKey(playerUUID)) {
+            loadPlayerAchievements(player);
         }
 
-        if (debug) {
-            plugin.debug("[Debug] Updating total blocks progress for " + player.getName() +
-                    ": +" + amount + " blocks");
-        }
+        Map<String, Integer> achievements = playerAchievements.get(playerUUID);
 
-        for (Achievement achievement : achievements.values()) {
-            if (achievement.getType().equalsIgnoreCase("TOTAL_BLOCKS")) {
-                PlayerAchievement playerAchievement = playerAchievementMap.get(achievement.getId());
+        // Find matching achievements
+        for (Map.Entry<String, Map<String, Object>> entry : achievementDefinitions.entrySet()) {
+            String achievementId = entry.getKey();
+            Map<String, Object> achievementData = entry.getValue();
 
-                if (playerAchievement != null && !playerAchievement.isClaimed()) {
-                    int oldProgress = playerAchievement.getProgress();
-                    int newProgress = Math.min(oldProgress + amount, achievement.getAmount());
-                    playerAchievement.setProgress(newProgress);
+            // Check if this is a total blocks achievement
+            if (achievementData.get("type").equals("TOTAL_BLOCKS")) {
+                // Update progress
+                int currentProgress = achievements.getOrDefault(achievementId, 0);
+                int requiredAmount = (int) achievementData.get("amount");
+                // Only increment if not already completed
+                if (currentProgress < requiredAmount) {
+                    int newProgress = Math.min(currentProgress + amount, requiredAmount);
+                    achievements.put(achievementId, newProgress);
 
-                    if (debug) {
-                        plugin.debug("[Debug] Updated total blocks progress for " + player.getName() +
-                                " on achievement " + achievement.getId() +
-                                ": " + oldProgress + " -> " + newProgress);
+                    // Check if achievement is completed
+                    if (currentProgress < requiredAmount && newProgress >= requiredAmount) {
+                        // Achievement completed
+                        completeAchievement(player, achievementId, achievementData);
                     }
-
-                    // Check if progress has been made
-                    if (newProgress > oldProgress) {
-                        // Check if achievement is completed
-                        if (newProgress == achievement.getAmount() && oldProgress < achievement.getAmount()) {
-                            // Achievement completed
-                            Map<String, String> placeholders = new HashMap<>();
-                            placeholders.put("name", achievement.getName());
-                            player.sendMessage(plugin.getMessageManager().getMessage("messages.achievements.progress.completed", placeholders));
-                        } else if (newProgress % (achievement.getAmount() / 4) == 0 ||
-                                (newProgress == achievement.getAmount() / 2)) {
-                            // Progress update (at 25%, 50%, 75%)
-                            Map<String, String> placeholders = new HashMap<>();
-                            placeholders.put("name", achievement.getName());
-                            placeholders.put("progress", String.valueOf(newProgress));
-                            placeholders.put("total", String.valueOf(achievement.getAmount()));
-                            player.sendMessage(plugin.getMessageManager().getMessage("messages.achievements.progress.updated", placeholders));
-                        }
-                    }
+                } else {
+                    // Already completed, no need to update progress
+                    achievements.put(achievementId, requiredAmount);
                 }
             }
         }
     }
 
-    // Check level achievements based on player's current level in the database
-    private void checkLevelAchievements(Player player) {
-        if (!enabled || !plugin.getLevelManager().isEnabled()) {
-            return;
-        }
-
-        // Get player's current level from the level manager
-        UUID uuid = player.getUniqueId();
-        int currentLevel = 1; // Default level
-
-        try {
-            // Get player data from level manager
-            if (plugin.getLevelManager().getPlayerData(uuid) != null) {
-                currentLevel = plugin.getLevelManager().getPlayerData(uuid).getLevel();
-
-                if (debug) {
-                    plugin.debug("[Debug] Checking level achievements for " + player.getName() +
-                            " - Current Level: " + currentLevel);
-                }
-
-                // Update level achievements with the current level
-                updateLevelProgress(player, currentLevel);
-            } else {
-                if (debug) {
-                    plugin.debug("[Debug] No level data found for " + player.getName() +
-                            " when checking level achievements");
-                }
-
-                // Try to load level data directly from database as a fallback
-                try {
-                    org.bischofftv.veinminer.database.PlayerData playerData = plugin.getDatabaseManager().loadPlayerData(player).join();
-                    if (playerData != null) {
-                        currentLevel = playerData.getLevel();
-                        if (debug) {
-                            plugin.debug("[Debug] Loaded level data directly from database: " + currentLevel);
-                        }
-                        updateLevelProgress(player, currentLevel);
-                    }
-                } catch (Exception e) {
-                    plugin.getLogger().warning("Failed to load level data from database: " + e.getMessage());
-                }
-            }
-        } catch (Exception e) {
-            plugin.getLogger().severe("Error checking level achievements for " + player.getName() + ": " + e.getMessage());
-            e.printStackTrace();
-        }
-    }
-
-    // Updated method to use the player's level from the database
+    /**
+     * Update level progress for a player
+     * @param player The player
+     * @param level The player's level
+     */
     public void updateLevelProgress(Player player, int level) {
         if (!enabled) {
             return;
         }
 
-        UUID uuid = player.getUniqueId();
-        Map<String, PlayerAchievement> playerAchievementMap = playerAchievements.get(uuid);
+        UUID playerUUID = player.getUniqueId();
 
-        if (playerAchievementMap == null) {
-            if (debug) {
-                plugin.debug("[Debug] No achievement data found for " + player.getName() +
-                        " when updating level progress");
+        // Check if player achievements are loaded
+        if (!playerAchievements.containsKey(playerUUID)) {
+            loadPlayerAchievements(player);
+        }
+
+        Map<String, Integer> achievements = playerAchievements.get(playerUUID);
+
+        // Find matching achievements
+        for (Map.Entry<String, Map<String, Object>> entry : achievementDefinitions.entrySet()) {
+            String achievementId = entry.getKey();
+            Map<String, Object> achievementData = entry.getValue();
+
+            // Check if this is a level achievement
+            if (achievementData.get("type").equals("LEVEL")) {
+                int requiredLevel = (int) achievementData.get("amount");
+
+                // Check if the player has reached the required level
+                if (level >= requiredLevel) {
+                    // Update progress (set to required amount)
+                    int currentProgress = achievements.getOrDefault(achievementId, 0);
+                    if (currentProgress < requiredLevel) {
+                        achievements.put(achievementId, requiredLevel);
+
+                        // Achievement completed
+                        completeAchievement(player, achievementId, achievementData);
+                    }
+                }
             }
+        }
+    }
+
+    /**
+     * Update skill master progress for a player
+     * @param player The player
+     */
+    public void updateSkillMasterProgress(Player player) {
+        if (!enabled || !plugin.getSkillManager().isEnabled()) {
             return;
         }
 
-        if (debug) {
-            plugin.debug("[Debug] Updating level achievements for " + player.getName() +
-                    " - Current Level: " + level);
+        UUID playerUUID = player.getUniqueId();
+
+        // Check if player achievements are loaded
+        if (!playerAchievements.containsKey(playerUUID)) {
+            loadPlayerAchievements(player);
         }
 
-        for (Achievement achievement : achievements.values()) {
-            if (achievement.getType().equalsIgnoreCase("LEVEL")) {
-                PlayerAchievement playerAchievement = playerAchievementMap.get(achievement.getId());
+        Map<String, Integer> achievements = playerAchievements.get(playerUUID);
 
-                if (playerAchievement != null && !playerAchievement.isClaimed()) {
-                    int targetLevel = achievement.getAmount();
+        // Get player data
+        PlayerData playerData = plugin.getPlayerDataManager().getPlayerData(player.getUniqueId());
+        if (playerData == null) {
+            return;
+        }
 
-                    if (debug) {
-                        plugin.debug("[Debug] Checking level achievement " + achievement.getId() +
-                                " - Target Level: " + targetLevel +
-                                ", Current Level: " + level +
-                                ", Current Progress: " + playerAchievement.getProgress());
-                    }
+        // Check if all skills are maxed out
+        int maxSkillLevel = plugin.getSkillManager().getMaxSkillLevel();
+        if (playerData.getEfficiencyLevel() >= maxSkillLevel &&
+                playerData.getLuckLevel() >= maxSkillLevel &&
+                playerData.getEnergyLevel() >= maxSkillLevel) {
 
-                    // Update progress to match current level if it's higher
-                    if (level > playerAchievement.getProgress()) {
-                        playerAchievement.setProgress(level);
+            // Find skill master achievements
+            for (Map.Entry<String, Map<String, Object>> entry : achievementDefinitions.entrySet()) {
+                String achievementId = entry.getKey();
+                Map<String, Object> achievementData = entry.getValue();
 
-                        if (debug) {
-                            plugin.debug("[Debug] Updated level progress for " + player.getName() +
-                                    " on achievement " + achievement.getId() +
-                                    ": " + playerAchievement.getProgress() + "/" + targetLevel);
-                        }
-                    }
-
-                    // Check if achievement is completed
-                    if (level >= targetLevel && playerAchievement.getProgress() < targetLevel) {
-                        playerAchievement.setProgress(targetLevel);
-
-                        if (debug) {
-                            plugin.debug("[Debug] Level achievement completed for " + player.getName() +
-                                    ": " + achievement.getId());
-                        }
+                // Check if this is a skill master achievement
+                if (achievementData.get("type").equals("SKILL_MASTER")) {
+                    // Update progress (set to 1)
+                    int currentProgress = achievements.getOrDefault(achievementId, 0);
+                    if (currentProgress < 1) {
+                        achievements.put(achievementId, 1);
 
                         // Achievement completed
-                        Map<String, String> placeholders = new HashMap<>();
-                        placeholders.put("name", achievement.getName());
-                        player.sendMessage(plugin.getMessageManager().getMessage("messages.achievements.progress.completed", placeholders));
+                        completeAchievement(player, achievementId, achievementData);
                     }
                 }
             }
         }
     }
 
-    // Update the claimAchievement method to provide better debugging
-    public boolean claimAchievement(Player player, String achievementId) {
-        if (!enabled) {
-            if (debug) {
-                plugin.debug("[Debug] Achievement system is disabled");
-            }
+    /**
+     * Complete an achievement for a player
+     * @param player The player
+     * @param achievementId The achievement ID
+     * @param achievementData The achievement data
+     */
+    private void completeAchievement(Player player, String achievementId, Map<String, Object> achievementData) {
+        String name = (String) achievementData.get("name");
+
+        // Send achievement completion message
+        String message = plugin.getMessageManager().formatMessage("messages.achievements.unlocked")
+                .replace("%achievement%", name);
+        player.sendMessage(message);
+
+        // Don't give rewards automatically - player must claim them
+    }
+
+    /**
+     * Claim rewards for a completed achievement
+     * @param player The player
+     * @param achievementId The achievement ID
+     * @return True if rewards were claimed, false otherwise
+     */
+    public boolean claimAchievementRewards(Player player, String achievementId) {
+        UUID playerUUID = player.getUniqueId();
+
+        // Check if player has completed the achievement
+        if (!playerAchievements.containsKey(playerUUID)) {
             return false;
         }
 
-        UUID uuid = player.getUniqueId();
-        Map<String, PlayerAchievement> playerAchievementMap = playerAchievements.get(uuid);
-
-        if (playerAchievementMap == null) {
-            if (debug) {
-                plugin.debug("[Debug] No achievement data found for player " + player.getName());
-            }
+        Map<String, Integer> achievements = playerAchievements.get(playerUUID);
+        if (!achievements.containsKey(achievementId)) {
             return false;
         }
 
-        PlayerAchievement playerAchievement = playerAchievementMap.get(achievementId);
-        Achievement achievement = achievements.get(achievementId);
-
-        if (playerAchievement == null) {
-            if (debug) {
-                plugin.debug("[Debug] Player achievement data not found for: " + achievementId);
-            }
+        // Check if the achievement is completed
+        Map<String, Object> achievementData = achievementDefinitions.get(achievementId);
+        if (achievementData == null) {
             return false;
         }
 
-        if (achievement == null) {
-            if (debug) {
-                plugin.debug("[Debug] Achievement definition not found for: " + achievementId);
-            }
-            return false;
-        }
+        int progress = achievements.get(achievementId);
+        int requiredAmount = (int) achievementData.get("amount");
 
-        if (debug) {
-            plugin.debug("[Debug] Attempting to claim achievement: " + achievement.getName() +
-                    " (" + achievementId + ") for " + player.getName());
-            plugin.debug("[Debug] Progress: " + playerAchievement.getProgress() + "/" +
-                    achievement.getAmount() + ", Claimed: " + playerAchievement.isClaimed());
+        if (progress < requiredAmount) {
+            return false;
         }
 
         // Check if already claimed
-        if (playerAchievement.isClaimed()) {
-            player.sendMessage(plugin.getMessageManager().getMessage("messages.achievements.claim.already-claimed"));
-            if (debug) {
-                plugin.debug("[Debug] Achievement already claimed");
-            }
+        if (hasClaimedAchievement(player, achievementId)) {
+            player.sendMessage(plugin.getMessageManager().formatMessage("messages.achievements.already-claimed"));
             return false;
         }
-
-        // Check if completed
-        if (playerAchievement.getProgress() < achievement.getAmount()) {
-            if (debug) {
-                plugin.debug("[Debug] Achievement not completed yet: " +
-                        playerAchievement.getProgress() + "/" + achievement.getAmount());
-            }
-            return false;
-        }
-
-        // Mark as claimed
-        playerAchievement.setClaimed(true);
 
         // Give rewards
-        boolean success = giveRewards(player, achievement);
+        if (achievementData.containsKey("rewards")) {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> rewards = (Map<String, Object>) achievementData.get("rewards");
 
-        // After achievement is successfully claimed and before the message is shown:
-        if (success) {
-            // Notify other servers about this achievement update
-            plugin.getDatabaseManager().notifyAchievementUpdate(uuid, achievementId);
+            // Money reward
+            if (economyEnabled && rewards.containsKey("money")) {
+                double money = (double) rewards.get("money");
 
-            // Send success message
-            Map<String, String> placeholders = new HashMap<>();
-            placeholders.put("name", achievement.getName());
-            player.sendMessage(plugin.getMessageManager().getMessage("messages.achievements.claim.success", placeholders));
-
-            // Build rewards message
-            StringBuilder rewardsMessage = new StringBuilder();
-
-            if (achievement.getMoney() > 0 && economyEnabled) {
-                Map<String, String> moneyPlaceholders = new HashMap<>();
-                moneyPlaceholders.put("amount", String.valueOf(achievement.getMoney()));
-                rewardsMessage.append(plugin.getMessageManager().getMessage("messages.achievements.claim.money", moneyPlaceholders));
-            }
-
-            if (!achievement.getItems().isEmpty()) {
-                if (rewardsMessage.length() > 0) {
-                    rewardsMessage.append(", ");
-                }
-
-                Map<String, String> itemsPlaceholders = new HashMap<>();
-                itemsPlaceholders.put("items", formatItemsList(achievement.getItems()));
-                rewardsMessage.append(plugin.getMessageManager().getMessage("messages.achievements.claim.items", itemsPlaceholders));
-            }
-
-            if (rewardsMessage.length() > 0) {
-                Map<String, String> rewardsPlaceholders = new HashMap<>();
-                rewardsPlaceholders.put("rewards", rewardsMessage.toString());
-                player.sendMessage(plugin.getMessageManager().getMessage("messages.achievements.claim.rewards", rewardsPlaceholders));
-            }
-
-            // WICHTIG: Sofort in der Datenbank speichern
-            try {
-                // Direkt in der Datenbank speichern, nicht asynchron
-                Connection conn = plugin.getDatabaseManager().getConnection();
-                if (conn != null) {
-                    try (PreparedStatement ps = conn.prepareStatement(
-                            "UPDATE " + plugin.getDatabaseManager().getTablePrefix() +
-                                    "achievements SET progress = ?, claimed = ? WHERE uuid = ? AND achievement_id = ?")) {
-
-                        ps.setInt(1, playerAchievement.getProgress());
-                        ps.setBoolean(2, playerAchievement.isClaimed());
-                        ps.setString(3, uuid.toString());
-                        ps.setString(4, achievementId);
-                        ps.executeUpdate();
-
-                        if (debug) {
-                            plugin.debug("[Debug] Directly saved achievement claim to database: " +
-                                    achievementId + " for player " + player.getName());
-                        }
-                    }
-                    conn.close();
-                }
-            } catch (SQLException e) {
-                plugin.getLogger().severe("Error directly saving achievement claim: " + e.getMessage());
-            }
-
-            // Dann auch asynchron speichern für alle anderen Achievements
-            savePlayerAchievements(player);
-
-            // Force synchronization to other servers
-            plugin.forceSyncDataNow();
-
-            // Warte kurz und synchronisiere erneut, um sicherzustellen, dass die Änderungen übernommen wurden
-            plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
-                plugin.forceSyncDataNow();
-
-                // Überprüfe, ob die Änderungen korrekt gespeichert wurden
-                if (debug) {
-                    plugin.debug("[Debug] Verifying achievement claim was saved correctly for " + player.getName());
-                    PlayerAchievement verifyAchievement = playerAchievementMap.get(achievementId);
-                    if (verifyAchievement != null) {
-                        plugin.debug("[Debug] Current state: Progress=" + verifyAchievement.getProgress() +
-                                ", Claimed=" + verifyAchievement.isClaimed());
-                    }
-                }
-            }, 20L); // 1 Sekunde später
-
-            if (debug) {
-                plugin.debug("[Debug] Achievement successfully claimed");
-            }
-
-            return true;
-        } else {
-            player.sendMessage(plugin.getMessageManager().getMessage("messages.achievements.claim.failed"));
-            if (debug) {
-                plugin.debug("[Debug] Failed to give rewards");
-            }
-            return false;
-        }
-    }
-
-    private boolean giveRewards(Player player, Achievement achievement) {
-        try {
-            // Give money if enabled
-            if (achievement.getMoney() > 0 && economyEnabled) {
-                String command = economyCommand
+                // Execute command to give money
+                String command = giveMoneyCommand
                         .replace("%player%", player.getName())
-                        .replace("%amount%", String.valueOf(achievement.getMoney()));
+                        .replace("%amount%", String.valueOf(money));
 
                 Bukkit.dispatchCommand(Bukkit.getConsoleSender(), command);
 
-                if (debug) {
-                    plugin.debug("[Debug] Executed economy command: " + command);
-                }
+                // Send reward message
+                String rewardMessage = plugin.getMessageManager().formatMessage("messages.achievements.reward")
+                        .replace("%reward%", money + " money");
+                player.sendMessage(rewardMessage);
             }
 
-            // Give items
-            for (String itemString : achievement.getItems()) {
-                String[] parts = itemString.split(":");
-                if (parts.length >= 2) {
+            // Item rewards
+            if (rewards.containsKey("items")) {
+                @SuppressWarnings("unchecked")
+                List<String> items = (List<String>) rewards.get("items");
+
+                for (String item : items) {
+                    String[] parts = item.split(":");
+                    String itemName = parts[0];
+                    int amount = parts.length > 1 ? Integer.parseInt(parts[1]) : 1;
+
                     try {
-                        Material material = Material.valueOf(parts[0]);
-                        int amount = Integer.parseInt(parts[1]);
+                        Material material = Material.valueOf(itemName);
+                        ItemStack itemStack = new ItemStack(material, amount);
 
-                        ItemStack item = new ItemStack(material, amount);
-                        HashMap<Integer, ItemStack> leftover = player.getInventory().addItem(item);
-
-                        // Drop items that didn't fit in inventory
+                        // Add to player's inventory or drop on ground if inventory is full
+                        HashMap<Integer, ItemStack> leftover = player.getInventory().addItem(itemStack);
                         for (ItemStack leftoverItem : leftover.values()) {
                             player.getWorld().dropItemNaturally(player.getLocation(), leftoverItem);
                         }
 
-                        if (debug) {
-                            plugin.debug("[Debug] Gave item to " + player.getName() + ": " +
-                                    material.name() + " x" + amount);
-                        }
+                        // Send reward message
+                        String rewardMessage = plugin.getMessageManager().formatMessage("messages.achievements.reward")
+                                .replace("%reward%", amount + "x " + formatItemName(itemName));
+                        player.sendMessage(rewardMessage);
                     } catch (IllegalArgumentException e) {
-                        plugin.getLogger().warning("Invalid item in achievement rewards: " + itemString);
+                        plugin.getLogger().warning("Invalid item in achievement reward: " + itemName);
                     }
-                }
-            }
-
-            return true;
-        } catch (Exception e) {
-            plugin.getLogger().severe("Error giving rewards to " + player.getName() + ": " + e.getMessage());
-            e.printStackTrace();
-            return false;
-        }
-    }
-
-    private String formatItemsList(List<String> items) {
-        StringBuilder sb = new StringBuilder();
-
-        for (int i = 0; i < items.size(); i++) {
-            String itemString = items.get(i);
-            String[] parts = itemString.split(":");
-
-            if (parts.length >= 2) {
-                try {
-                    Material material = Material.valueOf(parts[0]);
-                    int amount = Integer.parseInt(parts[1]);
-
-                    sb.append(amount).append("x ").append(formatMaterialName(material.name()));
-
-                    if (i < items.size() - 1) {
-                        sb.append(", ");
-                    }
-                } catch (IllegalArgumentException e) {
-                    // Skip invalid items
                 }
             }
         }
 
-        return sb.toString();
+        // Mark as claimed
+        markAchievementClaimed(player, achievementId);
+
+        // Send claimed message
+        player.sendMessage(plugin.getMessageManager().formatMessage("messages.achievements.claimed"));
+
+        return true;
     }
 
-    private String formatMaterialName(String name) {
-        String[] words = name.toLowerCase().split("_");
+    /**
+     * Format an item name to be more readable
+     * @param itemName The item name
+     * @return The formatted item name
+     */
+    private String formatItemName(String itemName) {
+        String[] words = itemName.toLowerCase().split("_");
         StringBuilder result = new StringBuilder();
 
         for (String word : words) {
@@ -1128,152 +670,58 @@ public class AchievementManager {
         return result.toString().trim();
     }
 
-    /**
-     * Saves an achievement directly to the database
-     */
-    private void saveAchievement(UUID uuid, String achievementId, int progress, boolean claimed) {
-        if (plugin.getDatabaseManager().isFallbackMode()) {
-            // Save to local cache in fallback mode
-            Map<String, Object> achievements = plugin.getDatabaseManager().getLocalAchievementCache().computeIfAbsent(uuid, k -> new HashMap<>());
-            Map<String, Object> achievementData = new HashMap<>();
-            achievementData.put("progress", progress);
-            achievementData.put("claimed", claimed);
-            achievements.put(achievementId, achievementData);
-            return;
+    // Add a method to reload achievements
+    public void reloadAchievements() {
+        // Clear current achievement definitions
+        achievementDefinitions.clear();
+
+        // Clear player achievements from memory to force reload from database
+        playerAchievements.clear();
+        claimedAchievements.clear();
+
+        // Reload from config
+        loadSettings();
+
+        // Update database schema to add new achievements
+        plugin.getDatabaseManager().updateAchievementSchema();
+
+        // Reload achievement data for online players
+        for (Player player : plugin.getServer().getOnlinePlayers()) {
+            loadPlayerAchievements(player);
         }
 
-        Connection conn = null;
-        try {
-            conn = plugin.getDatabaseManager().getConnection();
-            if (conn == null) return;
+        plugin.getLogger().info("Achievements reloaded. Total achievements: " + achievementDefinitions.size());
+    }
 
-            try (PreparedStatement ps = conn.prepareStatement(
-                    "INSERT INTO " + plugin.getDatabaseManager().getTablePrefix() + "achievements (uuid, achievement_id, progress, claimed) " +
-                            "VALUES (?, ?, ?, ?) " +
-                            "ON DUPLICATE KEY UPDATE progress = ?, claimed = ?")) {
-                ps.setString(1, uuid.toString());
-                ps.setString(2, achievementId);
-                ps.setInt(3, progress);
-                ps.setBoolean(4, claimed);
-                ps.setInt(5, progress);
-                ps.setBoolean(6, claimed);
-                ps.executeUpdate();
-
-                if (debug) {
-                    plugin.debug("[Debug] Saved achievement for " + uuid +
-                            ": " + achievementId +
-                            ", Progress: " + progress +
-                            ", Claimed: " + claimed);
-                }
-            }
-        } catch (SQLException e) {
-            plugin.getLogger().warning("Error saving achievement for " + uuid + ": " + e.getMessage());
-        } finally {
-            if (conn != null) {
+    // Add a method to get the icon material for an achievement
+    public Material getAchievementIcon(String achievementId) {
+        if (achievementDefinitions.containsKey(achievementId)) {
+            Map<String, Object> achievementData = achievementDefinitions.get(achievementId);
+            if (achievementData.containsKey("icon")) {
+                String iconName = (String) achievementData.get("icon");
                 try {
-                    conn.close();
-                } catch (SQLException e) {
-                    // Ignore
+                    return Material.valueOf(iconName.toUpperCase());
+                } catch (IllegalArgumentException e) {
+                    plugin.getLogger().warning("Invalid material for achievement icon: " + iconName);
                 }
             }
+
+            // If no specific icon or invalid, use type-based icon
+            String type = (String) achievementData.get("type");
+            if (type != null) {
+                return plugin.getAchievementGUI().getTypeIcon(type);
+            }
         }
+
+        // Default fallback
+        return Material.PAPER;
     }
 
     /**
-     * Clears the cached achievements for a player to force a reload
+     * Get achievement definitions
+     * @return The achievement definitions
      */
-    public void clearPlayerAchievements(Player player) {
-        UUID uuid = player.getUniqueId();
-        playerAchievements.remove(uuid);
-
-        if (debug) {
-            plugin.debug("[Debug] Cleared achievement cache for " + player.getName());
-        }
-    }
-
-    public static class Achievement {
-        private final String id;
-        private final String name;
-        private final String description;
-        private final String type;
-        private final String block;
-        private final int amount;
-        private final int money;
-        private final List<String> items;
-
-        public Achievement(String id, String name, String description, String type, String block, int amount, int money, List<String> items) {
-            this.id = id;
-            this.name = name;
-            this.description = description;
-            this.type = type;
-            this.block = block;
-            this.amount = amount;
-            this.money = money;
-            this.items = items;
-        }
-
-        public String getId() {
-            return id;
-        }
-
-        public String getName() {
-            return name;
-        }
-
-        public String getDescription() {
-            return description;
-        }
-
-        public String getType() {
-            return type;
-        }
-
-        public String getBlock() {
-            return block;
-        }
-
-        public int getAmount() {
-            return amount;
-        }
-
-        public int getMoney() {
-            return money;
-        }
-
-        public List<String> getItems() {
-            return items;
-        }
-    }
-
-    public static class PlayerAchievement {
-        private final String achievementId;
-        private int progress;
-        private boolean claimed;
-
-        public PlayerAchievement(String achievementId, int progress, boolean claimed) {
-            this.achievementId = achievementId;
-            this.progress = progress;
-            this.claimed = claimed;
-        }
-
-        public String getAchievementId() {
-            return achievementId;
-        }
-
-        public int getProgress() {
-            return progress;
-        }
-
-        public void setProgress(int progress) {
-            this.progress = progress;
-        }
-
-        public boolean isClaimed() {
-            return claimed;
-        }
-
-        public void setClaimed(boolean claimed) {
-            this.claimed = claimed;
-        }
+    public Map<String, Map<String, Object>> getAchievementDefinitions() {
+        return achievementDefinitions;
     }
 }

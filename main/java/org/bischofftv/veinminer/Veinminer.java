@@ -6,15 +6,12 @@ import org.bischofftv.veinminer.commands.*;
 import org.bischofftv.veinminer.config.ConfigManager;
 import org.bischofftv.veinminer.database.DatabaseManager;
 import org.bischofftv.veinminer.gui.MainGUI;
-import org.bischofftv.veinminer.listeners.AchievementListener;
-import org.bischofftv.veinminer.listeners.BlockBreakListener;
-import org.bischofftv.veinminer.listeners.GUIListener;
-import org.bischofftv.veinminer.listeners.PlayerListener;
+import org.bischofftv.veinminer.gui.SkillGUI;
+import org.bischofftv.veinminer.hooks.WorldGuardHook;
+import org.bischofftv.veinminer.listeners.*;
 import org.bischofftv.veinminer.logging.MiningLogger;
-import org.bischofftv.veinminer.utils.LevelManager;
-import org.bischofftv.veinminer.utils.MessageManager;
-import org.bischofftv.veinminer.utils.PlayerDataManager;
-import org.bischofftv.veinminer.utils.VeinMinerUtils;
+import org.bischofftv.veinminer.skills.SkillManager;
+import org.bischofftv.veinminer.utils.*;
 import org.bstats.bukkit.Metrics;
 import org.bstats.charts.SimplePie;
 import org.bstats.charts.SingleLineChart;
@@ -43,27 +40,101 @@ public class Veinminer extends JavaPlugin {
     private AchievementManager achievementManager;
     private AchievementGUI achievementGUI;
     private MainGUI mainGUI;
+    private SkillGUI skillGUI;
+    private SkillManager skillManager;
     private BukkitTask autoSaveTask;
     private boolean debugMode;
     private VeinMinerUtils veinMinerUtils;
-
-    // Füge diese Felder und Methoden zur Veinminer-Klasse hinzu
+    private WorldGuardHook worldGuardHook;
     private AdminCommand adminCommand;
+    private UpdateChecker updateChecker;
 
     private FileConfiguration messagesConfig = null;
     private File messagesConfigFile = null;
+    private FileConfiguration langConfig = null;
+    private File langConfigFile = null;
+
+    // Spigot resource ID for update checker
+    private static final int RESOURCE_ID = 123199;
+
+    /**
+     * Get the lang configuration
+     * @return The lang configuration
+     */
+    public FileConfiguration getLangConfig() {
+        if (langConfig == null) {
+            reloadLangConfig();
+        }
+        return langConfig;
+    }
+
+    /**
+     * Reload the lang configuration
+     */
+    public void reloadLangConfig() {
+        if (langConfigFile == null) {
+            langConfigFile = new File(getDataFolder(), "lang.yml");
+        }
+        langConfig = YamlConfiguration.loadConfiguration(langConfigFile);
+
+        // Load defaults from jar
+        InputStream defaultStream = getResource("lang.yml");
+        if (defaultStream != null) {
+            YamlConfiguration defaultConfig = YamlConfiguration.loadConfiguration(new InputStreamReader(defaultStream));
+            langConfig.setDefaults(defaultConfig);
+        }
+    }
+
+    /**
+     * Save the lang configuration
+     */
+    public void saveLangConfig() {
+        if (langConfig == null || langConfigFile == null) {
+            return;
+        }
+
+        try {
+            getLangConfig().save(langConfigFile);
+        } catch (IOException e) {
+            getLogger().severe("Could not save lang.yml: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Save the default lang configuration
+     */
+    public void saveDefaultLangConfig() {
+        if (langConfigFile == null) {
+            langConfigFile = new File(getDataFolder(), "lang.yml");
+        }
+
+        if (!langConfigFile.exists()) {
+            saveResource("lang.yml", false);
+        }
+    }
 
     @Override
     public void onEnable() {
         // Save default config if it doesn't exist
         saveDefaultConfig();
 
+        // Print the plugin version
+        getLogger().info("Enabling Veinminer v" + getDescription().getVersion());
+
         try {
-            // Save default messages.yml if it doesn't exist
+            // Save default lang.yml if it doesn't exist
+            saveDefaultLangConfig();
+        } catch (Exception e) {
+            getLogger().warning("Failed to load lang.yml: " + e.getMessage());
+            getLogger().warning("Will use default messages instead");
+        }
+
+        try {
+            // Save default messages.yml if it doesn't exist (for backward compatibility)
             saveDefaultMessagesConfig();
         } catch (Exception e) {
             getLogger().warning("Failed to load messages.yml: " + e.getMessage());
-            getLogger().warning("Will use default messages instead");
+            getLogger().warning("Will use lang.yml instead");
         }
 
         // Initialize ConfigManager first
@@ -101,6 +172,22 @@ public class Veinminer extends JavaPlugin {
                 return "Unknown";
             }));
 
+            // Add WorldGuard integration chart
+            metrics.addCustomChart(new SimplePie("worldguard_integration", () -> {
+                if (worldGuardHook != null) {
+                    return worldGuardHook.isEnabled() ? "Enabled" : "Disabled";
+                }
+                return "Not Installed";
+            }));
+
+            // Add Skill system chart
+            metrics.addCustomChart(new SimplePie("skill_system", () -> {
+                if (skillManager != null) {
+                    return skillManager.isEnabled() ? "Enabled" : "Disabled";
+                }
+                return "Disabled";
+            }));
+
             metrics.addCustomChart(new SingleLineChart("blocks_mined", () -> {
                 if (veinMinerUtils != null) {
                     return veinMinerUtils.getTotalBlocksMinedToday();
@@ -128,7 +215,12 @@ public class Veinminer extends JavaPlugin {
         this.achievementManager = new AchievementManager(this);
         this.achievementGUI = new AchievementGUI(this);
         this.mainGUI = new MainGUI(this);
+        this.skillManager = new SkillManager(this);
+        this.skillGUI = new SkillGUI(this);
         this.miningLogger = new MiningLogger(this);
+
+        // Initialize WorldGuard hook
+        this.worldGuardHook = new WorldGuardHook(this);
 
         // Initialize database
         try {
@@ -144,6 +236,17 @@ public class Veinminer extends JavaPlugin {
             getLogger().warning("Plugin will continue in fallback mode");
         }
 
+        // Debug: Print loaded configuration sections
+        if (debugMode) {
+            debug("Checking configuration sections:");
+            debug("- level-system exists: " + (getConfig().getConfigurationSection("level-system") != null));
+            debug("- achievement-system exists: " + (getConfig().getConfigurationSection("achievement-system") != null));
+            debug("- achievements exists: " + (getConfig().getConfigurationSection("achievements") != null));
+            if (getConfig().getConfigurationSection("achievements") != null) {
+                debug("- achievements keys: " + String.join(", ", getConfig().getConfigurationSection("achievements").getKeys(false)));
+            }
+        }
+
         // Register command executors - safely check if commands exist first
         safeRegisterCommand("veinminer", new CommandHandler(this));
         safeRegisterCommand("vmtoggle", new ToggleCommand(this));
@@ -153,6 +256,7 @@ public class Veinminer extends JavaPlugin {
         safeRegisterCommand("veinminerreload", new ReloadCommand(this));
         safeRegisterCommand("veinminerabout", new AboutCommand(this));
         safeRegisterCommand("veinminerhelp", new HelpCommand(this));
+        safeRegisterCommand("vmskill", new SkillCommand(this));
 
         // Also register the tab completer for the main command
         if (getCommand("veinminer") != null) {
@@ -164,8 +268,9 @@ public class Veinminer extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new PlayerListener(this), this);
         getServer().getPluginManager().registerEvents(new AchievementListener(this), this);
         getServer().getPluginManager().registerEvents(new GUIListener(this), this);
+        getServer().getPluginManager().registerEvents(new SkillGUIListener(this), this);
 
-        // Füge diese Zeile zur onEnable-Methode hinzu, nach der Initialisierung der anderen Befehle
+        // Add this line to the onEnable method, after initializing the other commands
         adminCommand = new AdminCommand(this);
 
         // Register the vmadmin command
@@ -186,6 +291,11 @@ public class Veinminer extends JavaPlugin {
 
         // Start auto-save task if enabled
         startAutoSaveTask();
+
+        // Initialize update checker
+        if (getConfig().getBoolean("settings.check-for-updates", true)) {
+            this.updateChecker = new UpdateChecker(this, RESOURCE_ID);
+        }
 
         getLogger().info("VeinMiner has been enabled!");
     }
@@ -222,17 +332,17 @@ public class Veinminer extends JavaPlugin {
             }
             databaseManager.synchronizeData();
 
-            // Füge eine verzögerte zweite Synchronisierung hinzu, um sicherzustellen, dass Änderungen übernommen wurden
+            // Add a delayed second synchronization to ensure changes are applied
             getServer().getScheduler().runTaskLater(this, () -> {
                 if (debugMode) {
                     getLogger().info("[Debug] Running follow-up synchronization...");
                 }
                 databaseManager.synchronizeData();
-            }, 10L); // 0.5 Sekunden später
+            }, 10L); // 0.5 seconds later
         }
     }
 
-    // Füge eine Methode hinzu, um eine erzwungene Synchronisierung durchzuführen
+    // Add a method to force synchronization
     public void forceSyncDataNow() {
         if (databaseManager != null) {
             if (debugMode) {
@@ -324,15 +434,13 @@ public class Veinminer extends JavaPlugin {
         }
     }
 
-// Füge diese Methode zur Veinminer-Klasse hinzu
-
     /**
-     * Setzt den Debug-Modus
-     * @param debugMode true, um den Debug-Modus zu aktivieren, false, um ihn zu deaktivieren
+     * Set the debug mode
+     * @param debugMode true to enable debug mode, false to disable it
      */
     public void setDebugMode(boolean debugMode) {
         this.debugMode = debugMode;
-        getLogger().info("Debug-Modus wurde " + (debugMode ? "aktiviert" : "deaktiviert") + ".");
+        getLogger().info("Debug mode has been " + (debugMode ? "enabled" : "disabled") + ".");
     }
 
     public ConfigManager getConfigManager() {
@@ -371,6 +479,14 @@ public class Veinminer extends JavaPlugin {
         return mainGUI;
     }
 
+    public SkillGUI getSkillGUI() {
+        return skillGUI;
+    }
+
+    public SkillManager getSkillManager() {
+        return skillManager;
+    }
+
     public boolean isDebugMode() {
         return debugMode;
     }
@@ -379,7 +495,23 @@ public class Veinminer extends JavaPlugin {
         return veinMinerUtils;
     }
 
-    // Füge diese Getter-Methode hinzu
+    /**
+     * Get the WorldGuard hook
+     * @return The WorldGuard hook
+     */
+    public WorldGuardHook getWorldGuardHook() {
+        return worldGuardHook;
+    }
+
+    /**
+     * Get the update checker
+     * @return The update checker
+     */
+    public UpdateChecker getUpdateChecker() {
+        return updateChecker;
+    }
+
+    // Add this getter method
     public AdminCommand getAdminCommand() {
         return adminCommand;
     }

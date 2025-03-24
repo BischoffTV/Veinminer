@@ -20,7 +20,7 @@ public class ToggleCommand implements CommandExecutor {
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (!(sender instanceof Player)) {
-            sender.sendMessage(plugin.getMessageManager().getMessage("messages.command.player-only"));
+            sender.sendMessage(plugin.getMessageManager().getMessage("messages.command.player-only", "This command can only be used by players."));
             return true;
         }
 
@@ -30,7 +30,7 @@ public class ToggleCommand implements CommandExecutor {
         if (plugin.getConfig().getBoolean("permissions.require-permission", true)) {
             String permission = plugin.getConfig().getString("permissions.use-permission", "veinminer.use");
             if (!player.hasPermission(permission)) {
-                sender.sendMessage(plugin.getMessageManager().getMessage("messages.command.no-permission"));
+                sender.sendMessage(plugin.getMessageManager().getMessage("messages.command.no-permission", "You don't have permission to use this command."));
                 return true;
             }
         }
@@ -41,9 +41,9 @@ public class ToggleCommand implements CommandExecutor {
             plugin.getPlayerDataManager().setVeinMinerEnabled(player, newState);
 
             if (newState) {
-                player.sendMessage(plugin.getMessageManager().getMessage("messages.toggle.enabled"));
+                player.sendMessage(plugin.getMessageManager().getMessage("messages.toggle.enabled", "VeinMiner has been enabled."));
             } else {
-                player.sendMessage(plugin.getMessageManager().getMessage("messages.toggle.disabled"));
+                player.sendMessage(plugin.getMessageManager().getMessage("messages.toggle.disabled", "VeinMiner has been disabled."));
             }
             return true;
         }
@@ -54,12 +54,12 @@ public class ToggleCommand implements CommandExecutor {
             switch (subCommand) {
                 case "on":
                     plugin.getPlayerDataManager().setVeinMinerEnabled(player, true);
-                    player.sendMessage(plugin.getMessageManager().getMessage("messages.toggle.enabled"));
+                    player.sendMessage(plugin.getMessageManager().getMessage("messages.toggle.enabled", "VeinMiner has been enabled."));
                     return true;
 
                 case "off":
                     plugin.getPlayerDataManager().setVeinMinerEnabled(player, false);
-                    player.sendMessage(plugin.getMessageManager().getMessage("messages.toggle.disabled"));
+                    player.sendMessage(plugin.getMessageManager().getMessage("messages.toggle.disabled", "VeinMiner has been disabled."));
                     return true;
 
                 case "toggle":
@@ -67,21 +67,21 @@ public class ToggleCommand implements CommandExecutor {
                     plugin.getPlayerDataManager().setVeinMinerEnabled(player, newState);
 
                     if (newState) {
-                        player.sendMessage(plugin.getMessageManager().getMessage("messages.toggle.enabled"));
+                        player.sendMessage(plugin.getMessageManager().getMessage("messages.toggle.enabled", "VeinMiner has been enabled."));
                     } else {
-                        player.sendMessage(plugin.getMessageManager().getMessage("messages.toggle.disabled"));
+                        player.sendMessage(plugin.getMessageManager().getMessage("messages.toggle.disabled", "VeinMiner has been disabled."));
                     }
                     return true;
 
                 case "tool":
                     if (args.length < 2) {
-                        player.sendMessage(plugin.getMessageManager().getMessage("messages.command.usage-tool"));
+                        player.sendMessage(plugin.getMessageManager().getMessage("messages.command.usage-tool", "Usage: /veinminer tool <pickaxe|axe|shovel|hoe>"));
                         return true;
                     }
 
                     String toolType = args[1].toLowerCase();
                     if (!isValidToolType(toolType)) {
-                        player.sendMessage(plugin.getMessageManager().getMessage("messages.command.invalid-tool-type"));
+                        player.sendMessage(plugin.getMessageManager().getMessage("messages.command.invalid-tool-type", "Invalid tool type. Valid types: pickaxe, axe, shovel, hoe"));
                         return true;
                     }
 
@@ -89,17 +89,17 @@ public class ToggleCommand implements CommandExecutor {
                     plugin.getPlayerDataManager().setToolEnabled(player, toolType, toolEnabled);
 
                     Map<String, String> placeholders = new HashMap<>();
-                    placeholders.put("tool", toolType);
+                    placeholders.put("%tool%", toolType);
 
                     if (toolEnabled) {
-                        player.sendMessage(plugin.getMessageManager().getMessage("messages.toggle.tool-enabled", placeholders));
+                        player.sendMessage(plugin.getMessageManager().formatMessage("messages.toggle.tool-enabled", "%tool%", toolType));
                     } else {
-                        player.sendMessage(plugin.getMessageManager().getMessage("messages.toggle.tool-disabled", placeholders));
+                        player.sendMessage(plugin.getMessageManager().formatMessage("messages.toggle.tool-disabled", "%tool%", toolType));
                     }
                     return true;
 
                 default:
-                    player.sendMessage(plugin.getMessageManager().getMessage("messages.command.unknown-subcommand"));
+                    player.sendMessage(plugin.getMessageManager().getMessage("messages.command.unknown-subcommand", "Unknown subcommand. Use /veinminer help for a list of commands."));
                     return true;
             }
         }

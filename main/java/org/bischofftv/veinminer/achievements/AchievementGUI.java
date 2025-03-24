@@ -1,427 +1,373 @@
 package org.bischofftv.veinminer.achievements;
 
 import org.bischofftv.veinminer.Veinminer;
-import org.bischofftv.veinminer.achievements.AchievementManager.Achievement;
-import org.bischofftv.veinminer.achievements.AchievementManager.PlayerAchievement;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
-import org.bukkit.Registry;
+import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Player;
+import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
-import org.bukkit.enchantments.Enchantment;
-import org.bukkit.inventory.ItemFlag;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 public class AchievementGUI {
 
     private final Veinminer plugin;
-    private final int ITEMS_PER_PAGE = 45;
-    private final Map<UUID, Integer> playerPages = new HashMap<>();
+    private final Map<String, Material> achievementIcons;
 
     public AchievementGUI(Veinminer plugin) {
         this.plugin = plugin;
+        this.achievementIcons = new HashMap<>();
+        initializeIcons();
     }
 
-    public void openAchievementsMenu(Player player) {
-        if (!plugin.getAchievementManager().isEnabled()) {
-            player.sendMessage(plugin.getMessageManager().getMessage("messages.achievements.system-disabled"));
-            return;
-        }
+    private void initializeIcons() {
+        // Default icons for achievement types
+        achievementIcons.put("BLOCK_MINE", Material.DIAMOND_PICKAXE);
+        achievementIcons.put("TOTAL_BLOCKS", Material.IRON_PICKAXE);
+        achievementIcons.put("LEVEL", Material.EXPERIENCE_BOTTLE);
+        achievementIcons.put("SKILL_MASTER", Material.ENCHANTED_BOOK);
 
-        openAchievementsMenu(player, 0);
-    }
+        // Specific achievement icons - set defaults first
+        achievementIcons.put("mine_coal", Material.COAL_ORE);
+        achievementIcons.put("mine_iron", Material.IRON_ORE);
+        achievementIcons.put("mine_gold", Material.GOLD_ORE);
+        achievementIcons.put("mine_gold_2", Material.GOLD_BLOCK);
+        achievementIcons.put("mine_diamond", Material.DIAMOND_ORE);
+        achievementIcons.put("mine_diamond_2", Material.DIAMOND_BLOCK);
+        achievementIcons.put("mine_ancient_debris", Material.ANCIENT_DEBRIS);
+        achievementIcons.put("total_blocks", Material.STONE);
+        achievementIcons.put("total_blocks_2", Material.DIAMOND_PICKAXE);
+        achievementIcons.put("total_blocks_advanced", Material.NETHERITE_PICKAXE);
+        achievementIcons.put("reach_level_5", Material.EXPERIENCE_BOTTLE);
+        achievementIcons.put("reach_level_10", Material.ENCHANTED_GOLDEN_APPLE);
+        achievementIcons.put("skill_master", Material.ENCHANTED_BOOK);
 
-    // Update the openAchievementsMenu method to create a more visually appealing GUI
-    public void openAchievementsMenu(Player player, int page) {
-        if (!plugin.getAchievementManager().isEnabled()) {
-            player.sendMessage(plugin.getMessageManager().getMessage("messages.achievements.system-disabled"));
-            return;
-        }
-
-        boolean debug = plugin.getConfig().getBoolean("settings.debug", false);
-
-        // Store current page
-        playerPages.put(player.getUniqueId(), page);
-
-        // Get player achievements
-        Map<String, PlayerAchievement> playerAchievements = plugin.getAchievementManager().getPlayerAchievements(player);
-        List<Achievement> achievements = new ArrayList<>(plugin.getAchievementManager().getAchievements());
-
-        if (debug) {
-            plugin.debug("Opening achievements menu for " + player.getName());
-            plugin.debug("Player achievements loaded: " + (playerAchievements != null));
-            plugin.debug("Total configured achievements: " + achievements.size());
-            if (playerAchievements != null) {
-                plugin.debug("Player achievement entries: " + playerAchievements.size());
-                // Log each achievement for debugging
-                for (Map.Entry<String, PlayerAchievement> entry : playerAchievements.entrySet()) {
-                    PlayerAchievement pa = entry.getValue();
-                    plugin.debug("Achievement: " + entry.getKey() +
-                            ", Progress: " + pa.getProgress() +
-                            ", Claimed: " + pa.isClaimed());
-                }
-            }
-        }
-
-        if (achievements.isEmpty()) {
-            plugin.getLogger().warning("No achievements loaded! Check your config.yml");
-            player.sendMessage(plugin.getMessageManager().getMessage("messages.achievements.none-configured"));
-            return;
-        }
-
-        if (playerAchievements == null || playerAchievements.isEmpty()) {
-            if (debug) {
-                plugin.debug("No player achievements found for " + player.getName() +
-                        ". Attempting to reload...");
-            }
-            plugin.getAchievementManager().loadPlayerAchievements(player);
-
-            // Use an array to make the variable effectively final for the lambda
-            final Map<String, PlayerAchievement>[] playerAchievementsArray = new Map[1];
-            final int finalPage = page;
-
-            // Wait a short time for achievements to load
-            plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
-                playerAchievementsArray[0] = plugin.getAchievementManager().getPlayerAchievements(player);
-                if (playerAchievementsArray[0] == null || playerAchievementsArray[0].isEmpty()) {
-                    if (debug) {
-                        plugin.debug("Failed to load player achievements for " + player.getName());
+        // Try to load custom icons from config
+        ConfigurationSection iconsSection = plugin.getConfig().getConfigurationSection("achievement-system.icons");
+        if (iconsSection != null) {
+            for (String achievementId : iconsSection.getKeys(false)) {
+                String materialName = iconsSection.getString(achievementId);
+                try {
+                    Material material = Material.valueOf(materialName.toUpperCase());
+                    achievementIcons.put(achievementId, material);
+                    if (plugin.isDebugMode()) {
+                        plugin.debug("Loaded custom icon for achievement " + achievementId + ": " + material.name());
                     }
-                    player.sendMessage(plugin.getMessageManager().getMessage("messages.achievements.load-failed"));
-                    return;
+                } catch (IllegalArgumentException e) {
+                    plugin.getLogger().warning("Invalid material for achievement icon: " + materialName);
                 }
-                // Retry opening the menu after loading
-                openAchievementsMenu(player, finalPage);
-            }, 20L); // Wait 1 second
+            }
+        }
+
+        // Debug output of all loaded icons
+        if (plugin.isDebugMode()) {
+            plugin.debug("Loaded achievement icons:");
+            for (Map.Entry<String, Material> entry : achievementIcons.entrySet()) {
+                plugin.debug("  " + entry.getKey() + ": " + entry.getValue().name());
+            }
+        }
+    }
+
+    /**
+     * Open the achievements GUI for a player
+     * @param player The player
+     */
+    public void openAchievementGUI(Player player) {
+        if (!plugin.getAchievementManager().isEnabled()) {
+            player.sendMessage(plugin.getMessageManager().formatMessage("messages.achievements.disabled"));
             return;
         }
 
-        // Create inventory
-        String title = plugin.getMessageManager().getMessage("messages.achievements.gui.title");
+        String title = ChatColor.GOLD + "VeinMiner Achievements";
         Inventory inventory = Bukkit.createInventory(null, 54, title);
 
-        // Fill the inventory with a glass pane border
-        ItemStack borderPane = createBorderItem();
-        for (int i = 0; i < 9; i++) {
-            inventory.setItem(i, borderPane); // Top row
-            inventory.setItem(45 + i, borderPane); // Bottom row
-        }
-        for (int i = 0; i < 5; i++) {
-            inventory.setItem(9 * i, borderPane); // Left column
-            inventory.setItem(9 * i + 8, borderPane); // Right column
-        }
+        // Get player achievements
+        Map<String, Integer> playerAchievements = plugin.getAchievementManager().getPlayerAchievements(player);
+        Map<String, Map<String, Object>> achievementDefinitions = plugin.getAchievementManager().getAchievementDefinitions();
 
-        // Add achievement stats item
-        inventory.setItem(4, createStatsItem(player, playerAchievements, achievements));
+        if (achievementDefinitions.isEmpty()) {
+            // No achievements defined
+            ItemStack noAchievementsItem = createItem(
+                    Material.BARRIER,
+                    ChatColor.translateAlternateColorCodes('&', plugin.getMessageManager().getMessage("gui.achievements-none-title", "&cNo Achievements Available")),
+                    ChatColor.translateAlternateColorCodes('&', plugin.getMessageManager().getMessage("gui.achievements-none-lore", "&7No achievements have been defined."))
+            );
+            inventory.setItem(22, noAchievementsItem);
+        } else {
+            int slot = 0;
+            plugin.getLogger().info("Placing " + achievementDefinitions.size() + " achievements in GUI");
 
-        // Calculate total pages and achievement slots
-        int achievementSlots = 28; // 7x4 grid in the middle
-        int totalPages = (int) Math.ceil((double) achievements.size() / achievementSlots);
-        if (totalPages == 0) totalPages = 1;
+            // Sort achievements by type for better organization
+            Map<String, List<Map.Entry<String, Map<String, Object>>>> groupedAchievements = new HashMap<>();
 
-        // Validate page number
-        if (page < 0) page = 0;
-        if (page >= totalPages) page = totalPages - 1;
-
-        // Sort achievements by type and completion status
-        sortAchievements(achievements, playerAchievements);
-
-        // Calculate start and end indices for this page
-        int startIndex = page * achievementSlots;
-        int endIndex = Math.min(startIndex + achievementSlots, achievements.size());
-
-        if (debug) {
-            plugin.debug("Page " + (page + 1) + " of " + totalPages);
-            plugin.debug("Displaying achievements from index " + startIndex + " to " + endIndex);
-        }
-
-        // Add achievement items to the middle grid
-        int slot = 0;
-        for (int i = startIndex; i < endIndex; i++) {
-            Achievement achievement = achievements.get(i);
-            PlayerAchievement playerAchievement = playerAchievements.get(achievement.getId());
-
-            if (playerAchievement == null) {
-                if (debug) {
-                    plugin.debug("Missing player achievement data for: " + achievement.getId());
+            // Group achievements by type
+            for (Map.Entry<String, Map<String, Object>> entry : achievementDefinitions.entrySet()) {
+                String type = (String) entry.getValue().get("type");
+                if (!groupedAchievements.containsKey(type)) {
+                    groupedAchievements.put(type, new ArrayList<>());
                 }
-                // Create default achievement data
-                playerAchievement = new AchievementManager.PlayerAchievement(achievement.getId(), 0, false);
-                playerAchievements.put(achievement.getId(), playerAchievement);
+                groupedAchievements.get(type).add(entry);
             }
 
-            // Calculate the slot in the middle grid
-            int row = slot / 7 + 1; // +1 to skip the top border row
-            int col = slot % 7 + 1; // +1 to skip the left border column
-            int inventorySlot = row * 9 + col;
+            // Process each type in a specific order
+            List<String> typeOrder = Arrays.asList("BLOCK_MINE", "TOTAL_BLOCKS", "LEVEL", "SKILL_MASTER");
+            for (String type : typeOrder) {
+                if (groupedAchievements.containsKey(type)) {
+                    for (Map.Entry<String, Map<String, Object>> entry : groupedAchievements.get(type)) {
+                        String achievementId = entry.getKey();
+                        Map<String, Object> achievementData = entry.getValue();
 
-            ItemStack item = createAchievementItem(achievement, playerAchievement);
-            inventory.setItem(inventorySlot, item);
+                        String name = (String) achievementData.get("name");
+                        String description = (String) achievementData.get("description");
+                        int requiredAmount = (int) achievementData.get("amount");
 
-            if (debug) {
-                plugin.debug("Added achievement '" + achievement.getName() +
-                        "' to slot " + inventorySlot +
-                        " (Progress: " + playerAchievement.getProgress() +
-                        "/" + achievement.getAmount() +
-                        ", Claimed: " + playerAchievement.isClaimed() + ")");
+                        // Get player progress
+                        int progress = playerAchievements.getOrDefault(achievementId, 0);
+                        boolean completed = progress >= requiredAmount;
+
+                        // Get icon
+                        Material iconMaterial = achievementIcons.getOrDefault(achievementId,
+                                achievementIcons.getOrDefault(type, Material.PAPER));
+
+                        // Check if the achievement has been claimed
+                        boolean claimed = plugin.getAchievementManager().hasClaimedAchievement(player, achievementId);
+
+                        // Create item
+                        ItemStack achievementItem = createAchievementItem(
+                                iconMaterial,
+                                name,
+                                description,
+                                progress,
+                                requiredAmount,
+                                completed,
+                                claimed,
+                                achievementData,
+                                achievementId  // Pass the achievement ID
+                        );
+
+                        inventory.setItem(slot++, achievementItem);
+
+                        // Only show 45 achievements max (9x5)
+                        if (slot >= 45) {
+                            plugin.getLogger().info("Reached max displayable achievements (45)");
+                            break;
+                        }
+                    }
+
+                    if (slot >= 45) break;
+                }
             }
 
-            slot++;
-        }
+            // Add any remaining achievements that weren't in the ordered types
+            for (Map.Entry<String, List<Map.Entry<String, Map<String, Object>>>> group : groupedAchievements.entrySet()) {
+                if (!typeOrder.contains(group.getKey())) {
+                    for (Map.Entry<String, Map<String, Object>> entry : group.getValue()) {
+                        String achievementId = entry.getKey();
+                        Map<String, Object> achievementData = entry.getValue();
 
-        // Add navigation items
-        if (page > 0) {
-            ItemStack prevPage = createNavigationItem(Material.ARROW,
-                    plugin.getMessageManager().getMessage("messages.achievements.gui.previous-page"));
-            inventory.setItem(47, prevPage);
-        }
+                        String name = (String) achievementData.get("name");
+                        String description = (String) achievementData.get("description");
+                        String type = (String) achievementData.get("type");
+                        int requiredAmount = (int) achievementData.get("amount");
 
-        if (page < totalPages - 1) {
-            ItemStack nextPage = createNavigationItem(Material.ARROW,
-                    plugin.getMessageManager().getMessage("messages.achievements.gui.next-page"));
-            inventory.setItem(51, nextPage);
-        }
+                        // Get player progress
+                        int progress = playerAchievements.getOrDefault(achievementId, 0);
+                        boolean completed = progress >= requiredAmount;
 
-        // Add page indicator
-        ItemStack pageIndicator = createPageIndicator(page + 1, totalPages);
-        inventory.setItem(49, pageIndicator);
+                        // Get icon
+                        Material iconMaterial = achievementIcons.getOrDefault(achievementId,
+                                achievementIcons.getOrDefault(type, Material.PAPER));
+
+                        // Check if the achievement has been claimed
+                        boolean claimed = plugin.getAchievementManager().hasClaimedAchievement(player, achievementId);
+
+                        // Create item
+                        ItemStack achievementItem = createAchievementItem(
+                                iconMaterial,
+                                name,
+                                description,
+                                progress,
+                                requiredAmount,
+                                completed,
+                                claimed,
+                                achievementData,
+                                achievementId  // Pass the achievement ID
+                        );
+
+                        inventory.setItem(slot++, achievementItem);
+
+                        // Only show 45 achievements max (9x5)
+                        if (slot >= 45) {
+                            break;
+                        }
+                    }
+
+                    if (slot >= 45) break;
+                }
+            }
+
+            plugin.getLogger().info("Placed " + slot + " achievements in GUI");
+        }
 
         // Add back button
-        ItemStack backButton = createNavigationItem(Material.DARK_OAK_DOOR,
-                ChatColor.YELLOW + "Back to Main Menu");
-        inventory.setItem(45, backButton);
+        ItemStack backButton = createItem(
+                Material.OAK_DOOR,
+                ChatColor.GREEN + "Back to Main Menu",
+                ChatColor.GRAY + "Return to the main menu"
+        );
+        inventory.setItem(49, backButton);
 
-        // Add close button
-        ItemStack closeButton = createNavigationItem(Material.BARRIER,
-                plugin.getMessageManager().getMessage("messages.achievements.gui.close"));
-        inventory.setItem(53, closeButton);
+        // Fill empty slots with glass panes
+        ItemStack filler = createItem(Material.GRAY_STAINED_GLASS_PANE, " ", new ArrayList<>());
+        for (int i = 0; i < inventory.getSize(); i++) {
+            if (inventory.getItem(i) == null) {
+                inventory.setItem(i, filler);
+            }
+        }
 
-        // Open inventory
         player.openInventory(inventory);
     }
 
-    // Add these new methods to support the improved GUI
+    /**
+     * Handle inventory click event
+     * @param event The inventory click event
+     */
+    public void handleInventoryClick(InventoryClickEvent event) {
+        if (!(event.getWhoClicked() instanceof Player)) {
+            return;
+        }
 
-    private void sortAchievements(List<Achievement> achievements, Map<String, PlayerAchievement> playerAchievements) {
-        achievements.sort((a1, a2) -> {
-            PlayerAchievement pa1 = playerAchievements.get(a1.getId());
-            PlayerAchievement pa2 = playerAchievements.get(a2.getId());
+        Player player = (Player) event.getWhoClicked();
+        ItemStack clickedItemStack = event.getCurrentItem();
 
-            if (pa1 == null || pa2 == null) {
-                return a1.getName().compareTo(a2.getName());
+        if (clickedItemStack == null || clickedItemStack.getType() == Material.AIR) {
+            return;
+        }
+
+        // Check if clicked on back button
+        if (event.getSlot() == 49 && clickedItemStack.getType() == Material.OAK_DOOR) {
+            player.closeInventory();
+            plugin.getMainGUI().openMainGUI(player);
+            return;
+        }
+
+        // Check if clicked on an achievement
+        ItemMeta meta = clickedItemStack.getItemMeta();
+        if (meta != null && meta.hasLore() && !meta.getLore().isEmpty()) {
+            List<String> lore = meta.getLore();
+            // Extract achievement ID from the first lore line
+            String firstLine = lore.get(0);
+            if (firstLine.startsWith(ChatColor.BLACK + "ID:")) {
+                String achievementId = firstLine.substring((ChatColor.BLACK + "ID:").length());
+                // Try to claim the achievement
+                boolean claimed = plugin.getAchievementManager().claimAchievementRewards(player, achievementId);
+                if (claimed) {
+                    // Refresh the GUI
+                    player.closeInventory();
+                    openAchievementGUI(player);
+                }
             }
-
-            // First sort by type
-            int typeCompare = a1.getType().compareTo(a2.getType());
-            if (typeCompare != 0) {
-                return typeCompare;
-            }
-
-            // Then by completion status
-            boolean a1Completed = pa1.getProgress() >= a1.getAmount();
-            boolean a2Completed = pa2.getProgress() >= a2.getAmount();
-
-            if (a1Completed && !a2Completed) return -1;
-            if (!a1Completed && a2Completed) return 1;
-
-            // Then by claim status for completed achievements
-            if (a1Completed && a2Completed) {
-                if (!pa1.isClaimed() && pa2.isClaimed()) return -1;
-                if (pa1.isClaimed() && !pa2.isClaimed()) return 1;
-            }
-
-            // Then by progress percentage for incomplete achievements
-            if (!a1Completed && !a2Completed) {
-                double a1Progress = (double) pa1.getProgress() / a1.getAmount();
-                double a2Progress = (double) pa2.getProgress() / a2.getAmount();
-
-                if (a1Progress > a2Progress) return -1;
-                if (a1Progress < a2Progress) return 1;
-            }
-
-            // Finally by name
-            return a1.getName().compareTo(a2.getName());
-        });
+        }
     }
 
-    private ItemStack createBorderItem() {
-        ItemStack item = new ItemStack(Material.BLACK_STAINED_GLASS_PANE);
-        ItemMeta meta = item.getItemMeta();
-        meta.setDisplayName(" ");
-        item.setItemMeta(meta);
-        return item;
-    }
+    /**
+     * Create an achievement item for the GUI
+     * @param material The material
+     * @param name The achievement name
+     * @param description The achievement description
+     * @param progress The player's progress
+     * @param requiredAmount The required amount to complete
+     * @param completed Whether the achievement is completed
+     * @param achievementData Additional achievement data
+     * @return The item
+     */
+    private ItemStack createAchievementItem(Material material, String name, String description,
+                                            int progress, int requiredAmount, boolean completed,
+                                            boolean claimed, Map<String, Object> achievementData,
+                                            String achievementId) {
+        ItemStack itemStack = new ItemStack(material);
+        ItemMeta meta = itemStack.getItemMeta();
 
-    private ItemStack createStatsItem(Player player, Map<String, PlayerAchievement> playerAchievements, List<Achievement> achievements) {
-        ItemStack item = new ItemStack(Material.ENCHANTED_BOOK);
-        ItemMeta meta = item.getItemMeta();
-        meta.setDisplayName(ChatColor.GOLD + player.getName() + "'s " + ChatColor.YELLOW + "Achievement Stats");
+        // Store the achievement ID as a persistent data tag (only in 1.14+)
+        // We'll use lore parsing as a fallback in our click handler
 
+        // Set name
+        meta.setDisplayName((completed ? ChatColor.GREEN : ChatColor.RED) + name);
+
+        // Create lore
         List<String> lore = new ArrayList<>();
+        // First line is hidden achievement ID for identification when clicked
+        lore.add(ChatColor.BLACK + "ID:" + achievementId);
+        lore.add(ChatColor.GRAY + description);
+        lore.add("");
 
-        // Count achievements by status
-        int total = achievements.size();
-        int completed = 0;
-        int claimed = 0;
-        int inProgress = 0;
+        // Add progress
+        int displayProgress = completed ? requiredAmount : progress; // Cap progress at required amount if completed
+        String progressText = ChatColor.YELLOW + plugin.getMessageManager().getMessage("gui.achievements-progress", "Progress: ") +
+                (completed ? ChatColor.GREEN : ChatColor.RED) +
+                displayProgress + ChatColor.GRAY + "/" + ChatColor.GREEN + requiredAmount;
+        lore.add(progressText);
 
-        for (Achievement achievement : achievements) {
-            PlayerAchievement playerAchievement = playerAchievements.get(achievement.getId());
-            if (playerAchievement != null) {
-                if (playerAchievement.isClaimed()) {
-                    claimed++;
-                    completed++;
-                } else if (playerAchievement.getProgress() >= achievement.getAmount()) {
-                    completed++;
-                } else if (playerAchievement.getProgress() > 0) {
-                    inProgress++;
+        // Add completion status
+        lore.add(completed ?
+                ChatColor.GREEN + plugin.getMessageManager().getMessage("gui.achievements-completed", "✓ Completed!") :
+                ChatColor.RED + plugin.getMessageManager().getMessage("gui.achievements-not-completed", "✗ Not completed"));
+
+        // Always add rewards section
+        lore.add("");
+        lore.add(ChatColor.GOLD + plugin.getMessageManager().getMessage("gui.achievements-rewards", "Rewards:"));
+
+        if (achievementData.containsKey("rewards")) {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> rewards = (Map<String, Object>) achievementData.get("rewards");
+
+            if (rewards.containsKey("money")) {
+                double money = (double) rewards.get("money");
+                lore.add(ChatColor.YELLOW + "• " + money + " " + plugin.getMessageManager().getMessage("gui.achievements-money", "money"));
+            }
+
+            if (rewards.containsKey("items")) {
+                @SuppressWarnings("unchecked")
+                List<String> items = (List<String>) rewards.get("items");
+                for (String itemStr : items) {
+                    String[] parts = itemStr.split(":");
+                    String itemName = parts[0];
+                    int amount = parts.length > 1 ? Integer.parseInt(parts[1]) : 1;
+                    lore.add(ChatColor.YELLOW + "• " + amount + "x " + formatItemName(itemName));
                 }
             }
         }
 
-        int notStarted = total - completed - inProgress;
-        int percentComplete = total > 0 ? (claimed * 100) / total : 0;
-
-        lore.add(ChatColor.WHITE + "Total Achievements: " + ChatColor.YELLOW + total);
-        lore.add(ChatColor.WHITE + "Completed & Claimed: " + ChatColor.GREEN + claimed);
-        lore.add(ChatColor.WHITE + "Completed (Unclaimed): " + ChatColor.GOLD + (completed - claimed));
-        lore.add(ChatColor.WHITE + "In Progress: " + ChatColor.AQUA + inProgress);
-        lore.add(ChatColor.WHITE + "Not Started: " + ChatColor.RED + notStarted);
-        lore.add("");
-        lore.add(ChatColor.WHITE + "Completion: " + ChatColor.YELLOW + percentComplete + "%");
+        // Add claim button for completed achievements that haven't been claimed yet
+        if (completed && !claimed) {
+            lore.add("");
+            lore.add(ChatColor.GREEN + "» " + ChatColor.BOLD + plugin.getMessageManager().getMessage("gui.achievements-claim", "Click to claim rewards") + ChatColor.GREEN + " «");
+        } else if (completed && claimed) {
+            lore.add("");
+            lore.add(ChatColor.GRAY + "✓ " + plugin.getMessageManager().getMessage("gui.achievements-claimed", "Rewards claimed"));
+        }
 
         meta.setLore(lore);
-        item.setItemMeta(meta);
-        return item;
+        itemStack.setItemMeta(meta);
+
+        return itemStack;
     }
 
-    private ItemStack createPageIndicator(int currentPage, int totalPages) {
-        ItemStack item = new ItemStack(Material.PAPER);
-        ItemMeta meta = item.getItemMeta();
-        meta.setDisplayName(ChatColor.YELLOW + "Page " + currentPage + " of " + totalPages);
-        item.setItemMeta(meta);
-        return item;
-    }
-
-    // Update the createAchievementItem method to use more distinctive items
-    private ItemStack createAchievementItem(Achievement achievement, PlayerAchievement playerAchievement) {
-        ItemStack item;
-        List<String> lore = new ArrayList<>();
-
-        // Add achievement type indicator
-        String typeDisplay = formatAchievementType(achievement.getType());
-        lore.add(ChatColor.GRAY + "Type: " + ChatColor.YELLOW + typeDisplay);
-
-        // Add description
-        lore.add(ChatColor.GRAY + achievement.getDescription());
-        lore.add("");
-
-        // Determine item type and status based on progress
-        if (playerAchievement.isClaimed()) {
-            // Completed and claimed
-            item = new ItemStack(Material.EMERALD_BLOCK);
-            lore.add(ChatColor.GREEN + "" + ChatColor.BOLD + "COMPLETED & CLAIMED");
-        } else if (playerAchievement.getProgress() >= achievement.getAmount()) {
-            // Completed but not claimed
-            item = new ItemStack(Material.GOLD_BLOCK);
-            lore.add(ChatColor.GOLD + "" + ChatColor.BOLD + "READY TO CLAIM!");
-            lore.add(ChatColor.YELLOW + "Click to claim your rewards!");
-        } else if (playerAchievement.getProgress() > 0) {
-            // In progress
-            double progressPercent = (double) playerAchievement.getProgress() / achievement.getAmount() * 100;
-
-            if (progressPercent >= 75) {
-                item = new ItemStack(Material.LIME_CONCRETE);
-            } else if (progressPercent >= 50) {
-                item = new ItemStack(Material.YELLOW_CONCRETE);
-            } else if (progressPercent >= 25) {
-                item = new ItemStack(Material.ORANGE_CONCRETE);
-            } else {
-                item = new ItemStack(Material.RED_CONCRETE);
-            }
-
-            Map<String, String> placeholders = new HashMap<>();
-            placeholders.put("progress", String.valueOf(playerAchievement.getProgress()));
-            placeholders.put("total", String.valueOf(achievement.getAmount()));
-            placeholders.put("percent", String.format("%.1f", progressPercent));
-
-            lore.add(ChatColor.YELLOW + "" + ChatColor.BOLD + "IN PROGRESS: " +
-                    ChatColor.WHITE + playerAchievement.getProgress() + "/" + achievement.getAmount() +
-                    ChatColor.GRAY + " (" + String.format("%.1f", progressPercent) + "%)");
-        } else {
-            // Not started
-            item = new ItemStack(Material.BEDROCK);
-            lore.add(ChatColor.RED + "" + ChatColor.BOLD + "LOCKED");
-            lore.add(ChatColor.GRAY + "Start working on this achievement!");
-        }
-
-        // Add rewards info
-        lore.add("");
-        lore.add(ChatColor.YELLOW + "" + ChatColor.BOLD + "REWARDS:");
-
-        if (achievement.getMoney() > 0 && plugin.getAchievementManager().isEconomyEnabled()) {
-            lore.add(ChatColor.GOLD + "• " + achievement.getMoney() + " money");
-        }
-
-        for (String itemString : achievement.getItems()) {
-            String[] parts = itemString.split(":");
-            if (parts.length >= 2) {
-                try {
-                    Material material = Material.valueOf(parts[0]);
-                    int amount = Integer.parseInt(parts[1]);
-                    lore.add(ChatColor.GOLD + "• " + amount + "x " + formatMaterialName(material.name()));
-                } catch (IllegalArgumentException e) {
-                    // Skip invalid items
-                }
-            }
-        }
-
-        // Set item meta
-        ItemMeta meta = item.getItemMeta();
-        meta.setDisplayName(ChatColor.GREEN + "" + ChatColor.BOLD + achievement.getName());
-        meta.setLore(lore);
-
-        // Add enchant glow to completed items
-        if (playerAchievement.isClaimed() || playerAchievement.getProgress() >= achievement.getAmount()) {
-            meta.addEnchant(Registry.ENCHANTMENT.get(org.bukkit.NamespacedKey.minecraft("unbreaking")), 1, true);
-            meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
-        }
-
-        item.setItemMeta(meta);
-        return item;
-    }
-
-    private String formatAchievementType(String type) {
-        switch (type.toUpperCase()) {
-            case "BLOCK_MINE":
-                return "Block Mining";
-            case "TOTAL_BLOCKS":
-                return "Total Blocks";
-            case "LEVEL":
-                return "Level Achievement";
-            default:
-                return type.substring(0, 1).toUpperCase() + type.substring(1).toLowerCase().replace("_", " ");
-        }
-    }
-
-    private ItemStack createNavigationItem(Material material, String name) {
-        ItemStack item = new ItemStack(material);
-        ItemMeta meta = item.getItemMeta();
-        meta.setDisplayName(name);
-        item.setItemMeta(meta);
-        return item;
-    }
-
-    private String formatMaterialName(String name) {
-        // Make sure to handle null or empty names
-        if (name == null || name.isEmpty()) {
-            return "Unknown";
-        }
-        String[] words = name.toLowerCase().split("_");
+    /**
+     * Format an item name to be more readable
+     * @param itemName The item name
+     * @return The formatted item name
+     */
+    private String formatItemName(String itemName) {
+        String[] words = itemName.toLowerCase().split("_");
         StringBuilder result = new StringBuilder();
 
         for (String word : words) {
@@ -435,93 +381,41 @@ public class AchievementGUI {
         return result.toString().trim();
     }
 
-    // Update the handleInventoryClick method to match the new layout
-    public void handleInventoryClick(Player player, int slot, Inventory inventory) {
-        final UUID uuid = player.getUniqueId();
-        final int currentPage = playerPages.getOrDefault(uuid, 0);
-        final boolean debug = plugin.getConfig().getBoolean("settings.debug", false);
-
-        // Check if it's a navigation item
-        if (slot == 45) {
-            // Back button
-            player.closeInventory();
-            plugin.getMainGUI().openMainMenu(player);
-            return;
-        } else if (slot == 47) {
-            // Previous page
-            openAchievementsMenu(player, currentPage - 1);
-            return;
-        } else if (slot == 51) {
-            // Next page
-            openAchievementsMenu(player, currentPage + 1);
-            return;
-        } else if (slot == 53) {
-            // Close
-            player.closeInventory();
-            return;
-        }
-
-        // Check if it's an achievement item (in the middle grid)
-        if (isAchievementSlot(slot)) {
-            // Convert GUI slot to achievement index
-            int gridRow = slot / 9 - 1; // -1 to account for top border
-            int gridCol = slot % 9 - 1; // -1 to account for left border
-            int gridIndex = gridRow * 7 + gridCol;
-            int achievementIndex = currentPage * 28 + gridIndex; // 28 is the number of achievement slots per page
-
-            // Use arrays to make variables effectively final for the lambda
-            final List<Achievement>[] achievementsArray = new List[1];
-            final Map<String, PlayerAchievement>[] playerAchievementsArray = new Map[1];
-
-            achievementsArray[0] = new ArrayList<>(plugin.getAchievementManager().getAchievements());
-            playerAchievementsArray[0] = plugin.getAchievementManager().getPlayerAchievements(player);
-
-            if (debug) {
-                plugin.debug("[Debug] Player clicked on achievement slot " + slot +
-                        ", grid index " + gridIndex +
-                        ", achievement index " + achievementIndex);
-                plugin.debug("[Debug] Total achievements: " + achievementsArray[0].size());
-                plugin.debug("[Debug] Player achievements: " + (playerAchievementsArray[0] != null ? playerAchievementsArray[0].size() : "null"));
-            }
-
-            // Sort achievements the same way as in openAchievementsMenu
-            sortAchievements(achievementsArray[0], playerAchievementsArray[0]);
-
-            if (achievementIndex >= 0 && achievementIndex < achievementsArray[0].size()) {
-                Achievement achievement = achievementsArray[0].get(achievementIndex);
-
-                if (debug) {
-                    plugin.debug("[Debug] Selected achievement: " + achievement.getId() + " - " + achievement.getName());
-
-                    PlayerAchievement pa = playerAchievementsArray[0].get(achievement.getId());
-                    if (pa != null) {
-                        plugin.debug("[Debug] Achievement progress: " + pa.getProgress() + "/" + achievement.getAmount() +
-                                ", Claimed: " + pa.isClaimed());
-                    } else {
-                        plugin.debug("[Debug] No player achievement data found for this achievement");
-                    }
-                }
-
-                // Try to claim the achievement
-                boolean claimed = plugin.getAchievementManager().claimAchievement(player, achievement.getId());
-
-                if (debug) {
-                    plugin.debug("[Debug] Claim result: " + claimed);
-                }
-
-                if (claimed) {
-                    // Refresh the GUI
-                    openAchievementsMenu(player, currentPage);
-                }
-            }
-        }
+    /**
+     * Create a simple item for the GUI
+     * @param material The material
+     * @param name The name
+     * @param lore The lore
+     * @return The item
+     */
+    private ItemStack createItem(Material material, String name, String lore) {
+        List<String> loreList = new ArrayList<>();
+        loreList.add(lore);
+        return createItem(material, name, loreList);
     }
 
-    private boolean isAchievementSlot(int slot) {
-        // Check if the slot is in the middle grid (not in the border)
-        int row = slot / 9;
-        int col = slot % 9;
+    /**
+     * Create a simple item for the GUI
+     * @param material The material
+     * @param name The name
+     * @param lore The lore
+     * @return The item
+     */
+    private ItemStack createItem(Material material, String name, List<String> lore) {
+        ItemStack item = new ItemStack(material);
+        ItemMeta meta = item.getItemMeta();
+        meta.setDisplayName(name);
+        meta.setLore(lore);
+        item.setItemMeta(meta);
+        return item;
+    }
 
-        return row >= 1 && row <= 4 && col >= 1 && col <= 7;
+    /**
+     * Get the icon material for an achievement type
+     * @param type The achievement type
+     * @return The icon material
+     */
+    public Material getTypeIcon(String type) {
+        return achievementIcons.getOrDefault(type, Material.PAPER);
     }
 }

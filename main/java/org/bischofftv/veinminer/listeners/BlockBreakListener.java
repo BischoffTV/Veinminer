@@ -20,10 +20,14 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
+import java.util.Iterator;
+import java.util.Random;
+import java.util.ArrayList;
 
 public class BlockBreakListener implements Listener {
 
     private final Veinminer plugin;
+    private final Random random = new Random();
 
     public BlockBreakListener(Veinminer plugin) {
         this.plugin = plugin;
@@ -160,6 +164,43 @@ public class BlockBreakListener implements Listener {
             return;
         }
 
+        // Check WorldGuard protection for each block
+        if (plugin.getWorldGuardHook() != null && plugin.getWorldGuardHook().isEnabled()) {
+            // Create a copy of the collection to avoid ConcurrentModificationException
+            Iterator<Block> iterator = connectedBlocks.iterator();
+
+            // Skip the first block (startBlock) as it's already been checked by the event
+            if (iterator.hasNext() && iterator.next().equals(startBlock)) {
+                // Do nothing, just skip the first block
+            }
+
+            // Check the rest of the blocks
+            while (iterator.hasNext()) {
+                Block block = iterator.next();
+
+                // Remove blocks that can't be broken due to WorldGuard protection
+                if (!plugin.getWorldGuardHook().canBreak(player, block)) {
+                    iterator.remove();
+
+                    if (debug) {
+                        plugin.debug("[Debug] Block at " + block.getLocation() + " removed due to WorldGuard protection");
+                    }
+                }
+            }
+
+            if (debug) {
+                plugin.debug("[Debug] After WorldGuard check: " + connectedBlocks.size() + " blocks remaining");
+            }
+
+            // Skip if only the original block is left after WorldGuard checks
+            if (connectedBlocks.size() <= 1) {
+                if (debug) {
+                    plugin.debug("[Debug] Not enough blocks left after WorldGuard check, skipping vein mining");
+                }
+                return;
+            }
+        }
+
         // Track mining statistics for logging
         int blocksDestroyed = 0;
         Map<Material, Integer> itemsCollected = new HashMap<>();
@@ -193,6 +234,22 @@ public class BlockBreakListener implements Listener {
                     drops = VeinMiningUtils.getSilkTouchDrops(block);
                 } else {
                     drops = VeinMiningUtils.getFortuneDrops(block, fortuneLevel);
+
+                    // Apply luck enhancement skill if enabled
+                    if (plugin.getSkillManager() != null && plugin.getSkillManager().isEnabled() &&
+                            plugin.getSkillManager().shouldGetLuckEnhancement(player)) {
+                        // Add extra drops based on luck enhancement
+                        for (ItemStack drop : new ArrayList<>(drops)) {
+                            ItemStack extraDrop = drop.clone();
+                            extraDrop.setAmount(1); // Just add one extra item
+                            drops.add(extraDrop);
+
+                            if (debug) {
+                                plugin.debug("[Debug] Luck Enhancement applied for " + player.getName() +
+                                        " - Added extra " + extraDrop.getType().name());
+                            }
+                        }
+                    }
                 }
 
                 // Add drops to player's inventory
@@ -284,6 +341,18 @@ public class BlockBreakListener implements Listener {
             damage = (int) Math.ceil(damage * plugin.getConfigManager().getDurabilityMultiplier());
         }
 
+        // Apply efficiency boost skill if enabled
+        if (plugin.getSkillManager() != null && plugin.getSkillManager().isEnabled() &&
+                plugin.getSkillManager().shouldGetEfficiencyBoost(player)) {
+            // Reduce damage based on efficiency boost
+            damage = (int) Math.ceil(damage * 0.5); // Reduce damage by 50%
+
+            if (plugin.isDebugMode()) {
+                plugin.debug("[Debug] Efficiency Boost applied for " + player.getName() +
+                        " - Reduced durability damage from " + blocksDestroyed + " to " + damage);
+            }
+        }
+
         // Apply unbreaking enchantment reduction
         Enchantment unbreakingEnchant = Registry.ENCHANTMENT.get(NamespacedKey.minecraft("unbreaking"));
         int unbreakingLevel = tool.getEnchantmentLevel(unbreakingEnchant);
@@ -310,6 +379,20 @@ public class BlockBreakListener implements Listener {
 
     private void applyHunger(Player player, int blocksDestroyed) {
         double hungerToApply = blocksDestroyed * plugin.getConfigManager().getHungerMultiplier();
+
+        // Apply energy conservation skill if enabled
+        if (plugin.getSkillManager() != null && plugin.getSkillManager().isEnabled() &&
+                plugin.getSkillManager().shouldGetEnergyConservation(player)) {
+            // Reduce hunger based on energy conservation
+            hungerToApply = hungerToApply * 0.5; // Reduce hunger by 50%
+
+            if (plugin.isDebugMode()) {
+                plugin.debug("[Debug] Energy Conservation applied for " + player.getName() +
+                        " - Reduced hunger from " + (blocksDestroyed * plugin.getConfigManager().getHungerMultiplier()) +
+                        " to " + hungerToApply);
+            }
+        }
+
         int foodLevel = player.getFoodLevel();
         int newFoodLevel = Math.max(0, (int) (foodLevel - hungerToApply));
         player.setFoodLevel(newFoodLevel);

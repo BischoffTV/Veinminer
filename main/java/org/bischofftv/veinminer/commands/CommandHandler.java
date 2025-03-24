@@ -67,7 +67,7 @@ public class CommandHandler implements CommandExecutor {
                     return achievementsCommand.onCommand(sender, command, label, args);
 
                 default:
-                    sender.sendMessage(plugin.getMessageManager().getMessage("messages.command.unknown-subcommand"));
+                    sender.sendMessage(plugin.getMessageManager().getMessage("messages.command.unknown-subcommand", "Unknown subcommand. Use /veinminer help for a list of commands."));
                     return true;
             }
         }

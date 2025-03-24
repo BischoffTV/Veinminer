@@ -1,22 +1,72 @@
 # VeinMiner Configuration
 
 settings:
-# Maximum number of blocks that can be mined at once (if level system is disabled)
-max-blocks: 64
+  # Maximum number of blocks that can be mined at once (if level system is disabled)
+  max-blocks: 64
 
-# Durability settings
-use-durability-multiplier: true
-durability-multiplier: 1.0
+  # Durability settings
+  use-durability-multiplier: true
+  durability-multiplier: 1.0
 
-# Hunger settings
-use-hunger-multiplier: true
-hunger-multiplier: 0.1
+  # Hunger settings
+  use-hunger-multiplier: true
+  hunger-multiplier: 0.1
 
-# Debug mode - enables additional logging
-debug: false
+  # Debug mode - enables additional logging
+  debug: false
 
-# Auto-save interval in minutes (0 to disable)
-auto-save-interval: 15
+  # Auto-save interval in minutes (0 to disable)
+  auto-save-interval: 15
+
+  # Whether to check for updates
+  check-for-updates: true
+
+# WorldGuard integration
+worldguard:
+  # Whether to respect WorldGuard regions
+  enabled: true
+  # Whether to show debug messages for WorldGuard checks
+  debug: false
+
+# Skill system settings
+skill-system:
+  # Whether to enable the skill system
+  enabled: true
+  # Maximum level for each skill
+  max-skill-level: 5
+
+  # Reset settings
+  reset:
+    # Whether resetting skills costs money
+    cost-enabled: true
+    # Cost to reset skills
+    cost: 1000.0
+    # Command to execute to take money from player
+    command: "eco take %player% %amount%"
+
+  # Efficiency Boost: Chance to reduce durability consumption
+  efficiency-boost:
+    level-1: 10.0  # 10% chance
+    level-2: 20.0  # 20% chance
+    level-3: 30.0  # 30% chance
+    level-4: 40.0  # 40% chance
+    level-5: 50.0  # 50% chance
+
+  # Luck Enhancement: Chance to get additional drops
+  luck-enhancement:
+    level-1: 5.0   # 5% chance
+    level-2: 10.0  # 10% chance
+    level-3: 15.0  # 15% chance
+    level-4: 20.0  # 20% chance
+    level-5: 25.0  # 25% chance
+
+  # Energy Conservation: Chance to reduce hunger consumption
+  energy-conservation:
+    level-1: 20.0  # 20% chance
+    level-2: 35.0  # 35% chance
+    level-3: 50.0  # 50% chance
+    level-4: 65.0  # 65% chance
+    level-5: 80.0  # 80% chance
 
 # List of blocks that can be mined with VeinMiner
 allowed-blocks:
@@ -52,10 +102,10 @@ allowed-blocks:
 
 # Permission settings
 permissions:
-# Whether to require a permission to use VeinMiner
-require-permission: true
-# The permission node required to use VeinMiner
-use-permission: "veinminer.use"
+  # Whether to require a permission to use VeinMiner
+  require-permission: true
+  # The permission node required to use VeinMiner
+  use-permission: "veinminer.use"
 
 # Level system settings
 level-system:
@@ -65,28 +115,28 @@ level-system:
   blocks-per-xp: 5
   # XP required for each level (level 1 requires 0 XP)
   xp-per-level:
-    1: 0
-    2: 100
-    3: 250
-    4: 500
-    5: 1000
-    6: 2000
-    7: 4000
-    8: 8000
-    9: 16000
-    10: 32000
+    '1': 0
+    '2': 100
+    '3': 250
+    '4': 500
+    '5': 1000
+    '6': 2000
+    '7': 4000
+    '8': 8000
+    '9': 16000
+    '10': 32000
   # Maximum blocks that can be mined at each level
   max-blocks-per-level:
-    1: 8
-    2: 16
-    3: 24
-    4: 32
-    5: 48
-    6: 64
-    7: 96
-    8: 128
-    9: 192
-    10: 256
+    '1': 8
+    '2': 16
+    '3': 24
+    '4': 32
+    '5': 48
+    '6': 64
+    '7': 96
+    '8': 128
+    '9': 192
+    '10': 256
   # Level up effects settings
   effects:
     # Whether to enable level up effects
@@ -122,8 +172,23 @@ level-system:
 
 # Achievement system settings
 achievement-system:
-# Whether to enable the achievement system
-enabled: true
+  # Whether to enable the achievement system
+  enabled: true
+
+  # Custom icons for achievements (uses Material enum names)
+  icons:
+    mine_coal: "COAL_ORE"
+    mine_iron: "IRON_ORE"
+    mine_gold: "GOLD_ORE"
+    mine_diamond: "DIAMOND_ORE"
+    mine_diamond_2: "DIAMOND_BLOCK"
+    mine_ancient_debris: "ANCIENT_DEBRIS"
+    total_blocks: "STONE"
+    total_blocks_advanced: "NETHERITE_PICKAXE"
+    total_blocks_2: "DIAMOND_PICKAXE"
+    reach_level_5: "EXPERIENCE_BOTTLE"
+    reach_level_10: "ENCHANTED_GOLDEN_APPLE"
+    skill_master: "ENCHANTED_BOOK"
 
 # Economy settings for rewards
 economy:
@@ -233,6 +298,19 @@ achievements:
         - "ENCHANTED_GOLDEN_APPLE:1"
         - "DIAMOND:8"
 
+  # Skill achievements
+  skill_master:
+    name: "Skill Master"
+    description: "Max out all skills"
+    type: "SKILL_MASTER"
+    amount: 1
+    rewards:
+      money: 5000
+      items:
+        - "NETHERITE_PICKAXE:1"
+        - "NETHERITE_AXE:1"
+        - "NETHERITE_SHOVEL:1"
+
 # GUI settings
 gui:
   # Whether to show the About section in the main menu
@@ -240,12 +318,10 @@ gui:
 
 # Database settings for level system
 database:
-  # Whether to use MySQL for storing player data
+  name: "veinminer"
   use-mysql: true
   host: "localhost"
   port: 3306
-  # Unterstützt sowohl "database" als auch "name"
-  database: "veinminer"
   username: "root"
   password: "test"
   table-prefix: "vm_"

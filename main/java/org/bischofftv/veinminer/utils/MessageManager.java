@@ -2,65 +2,125 @@ package org.bischofftv.veinminer.utils;
 
 import org.bischofftv.veinminer.Veinminer;
 import org.bukkit.ChatColor;
-import org.bukkit.configuration.file.YamlConfiguration;
+import org.bukkit.configuration.file.FileConfiguration;
 
-import java.io.File;
-import java.io.IOException;
-import java.io.InputStream;
-import java.nio.file.Files;
-import java.util.HashMap;
 import java.util.Map;
 
 public class MessageManager {
 
     private final Veinminer plugin;
-    private YamlConfiguration langConfig;
-    private final Map<String, String> messageCache;
 
     public MessageManager(Veinminer plugin) {
         this.plugin = plugin;
-        this.messageCache = new HashMap<>();
-        loadLanguageConfig();
     }
 
-    private void loadLanguageConfig() {
-        File langFile = new File(plugin.getDataFolder(), "lang.yml");
+    /**
+     * Format a message with the plugin prefix
+     * @param path The path to the message in the lang.yml file
+     * @return The formatted message
+     */
+    public String formatMessage(String path) {
+        String message = getMessage(path);
+        String prefix = getMessage("messages.prefix");
+        return ChatColor.translateAlternateColorCodes('&', prefix + message);
+    }
 
-        if (!langFile.exists()) {
-            try (InputStream in = plugin.getResource("lang.yml")) {
-                Files.copy(in, langFile.toPath());
-            } catch (IOException e) {
-                plugin.getLogger().severe("Could not create lang.yml: " + e.getMessage());
-                return;
+    /**
+     * Format a message with the plugin prefix and replacements
+     * @param path The path to the message in the lang.yml file
+     * @param replacements The replacements to make in the message (key-value pairs)
+     * @return The formatted message
+     */
+    public String formatMessage(String path, String... replacements) {
+        String message = getMessage(path);
+
+        // Apply replacements
+        if (replacements != null && replacements.length >= 2) {
+            for (int i = 0; i < replacements.length; i += 2) {
+                if (i + 1 < replacements.length) {
+                    message = message.replace(replacements[i], replacements[i + 1]);
+                }
             }
         }
 
-        langConfig = YamlConfiguration.loadConfiguration(langFile);
-        messageCache.clear();
+        String prefix = getMessage("messages.prefix");
+        return ChatColor.translateAlternateColorCodes('&', prefix + message);
     }
 
-    public void reloadMessages() {
-        loadLanguageConfig();
-    }
-
-    public String getMessage(String path) {
-        return messageCache.computeIfAbsent(path, k -> {
-            String message = langConfig.getString(path);
-            if (message == null) {
-                plugin.getLogger().warning("Missing message for path: " + path);
-                return "Missing message: " + path;
-            }
-            return ChatColor.translateAlternateColorCodes('&', message);
-        });
-    }
-
-    public String getMessage(String path, Map<String, String> placeholders) {
+    /**
+     * Format a message with the plugin prefix and replacements
+     * @param path The path to the message in the lang.yml file
+     * @param replacements The replacements to make in the message
+     * @return The formatted message
+     */
+    public String formatMessage(String path, Map<String, String> replacements) {
         String message = getMessage(path);
 
-        for (Map.Entry<String, String> entry : placeholders.entrySet()) {
-            message = message.replace("%" + entry.getKey() + "%", entry.getValue());
+        // Apply replacements
+        if (replacements != null) {
+            for (Map.Entry<String, String> entry : replacements.entrySet()) {
+                message = message.replace(entry.getKey(), entry.getValue());
+            }
+        }
+
+        String prefix = getMessage("messages.prefix");
+        return ChatColor.translateAlternateColorCodes('&', prefix + message);
+    }
+
+    /**
+     * Get a message from the lang.yml file
+     * @param path The path to the message
+     * @return The message
+     */
+    public String getMessage(String path) {
+        // Get from lang.yml
+        FileConfiguration langConfig = plugin.getLangConfig();
+        if (langConfig != null && langConfig.contains(path)) {
+            return langConfig.getString(path, "Message not found: " + path);
+        }
+
+        return "Message not found: " + path;
+    }
+
+    /**
+     * Get a message from the lang.yml file with replacements
+     * @param path The path to the message
+     * @param replacements The replacements to make in the message
+     * @return The message
+     */
+    public String getMessage(String path, Map<String, String> replacements) {
+        String message = getMessage(path);
+
+        // Apply replacements
+        if (replacements != null) {
+            for (Map.Entry<String, String> entry : replacements.entrySet()) {
+                message = message.replace(entry.getKey(), entry.getValue());
+            }
         }
 
         return message;
+    }
+
+    /**
+     * Get a message from the lang.yml file with a default value
+     * @param path The path to the message
+     * @param defaultValue The default value to return if the message is not found
+     * @return The message or the default value
+     */
+    public String getMessage(String path, String defaultValue) {
+        // Get from lang.yml
+        FileConfiguration langConfig = plugin.getLangConfig();
+        if (langConfig != null && langConfig.contains(path)) {
+            return langConfig.getString(path, defaultValue);
+        }
+
+        return defaultValue;
+    }
+
+    /**
+     * Reload the messages from the lang.yml file
+     */
+    public void reloadMessages() {
+        plugin.reloadLangConfig();
     }
 }

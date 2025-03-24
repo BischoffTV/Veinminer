@@ -1,24 +1,13 @@
 # VeinMiner Language Configuration
 
-# Command Messages
 messages:
-  help:
-    toggle: "&e/veinminer &7- Toggle VeinMiner on/off"
-    tool: "&e/veinminer tool <tooltype> &7- Toggle VeinMiner for a specific tool"
-    level: "&e/veinminer level &7- Show your VeinMiner level and progress"
-    achievements: "&e/veinminer achievements &7- Open the achievements menu"
-    reload: "&e/veinminerreload &7- Reload the configuration"
-    about: "&e/veinminerabout &7- Show information about the plugin"
-    usage: "&aTo use VeinMiner, hold shift while mining."
-    header: "&a=== VeinMiner Help ==="
-    gui: "&e/veinminer &7- Open the VeinMiner GUI menu"
+  prefix: "&8[&6VeinMiner&8] "
 
   command:
     player-only: "&cThis command can only be used by players."
     no-permission: "&cYou don't have permission to use this command."
-    unknown-subcommand: "&cUnknown subcommand. Use /veinminerhelp for help."
-    invalid-tool-type: "&cInvalid tool type. Valid types: pickaxe, axe, shovel, hoe"
-    usage-tool: "&cUsage: /veinminer tool <tooltype>"
+    invalid-args: "&cInvalid arguments. Use &6/%command% help&c for help."
+    player-not-found: "&cPlayer not found: %player%"
 
   toggle:
     enabled: "&aVeinMiner has been enabled."
@@ -27,85 +16,107 @@ messages:
     tool-disabled: "&cVeinMiner has been disabled for %tool%."
 
   level:
-    system-disabled: "&cThe VeinMiner level system is currently disabled."
-    data-not-loaded: "&cYour player data is not loaded. Please try again in a moment."
-    info:
-      header: "&a=== VeinMiner Level Info ==="
-      level: "&eLevel: &6%level%"
-      max-blocks: "&eMax Blocks: &6%max_blocks%"
-      current-xp: "&eXP: &6%current_xp%"
-      next-level: "&eXP needed for Level %next_level%: &6%xp_needed%"
-      max-level: "&eYou have reached the maximum level!"
-    set:
-      usage: "&cUsage: /veinminer setlevel <player> <level>"
-      player-not-found: "&cPlayer %player% not found or not online."
-      invalid-level: "&cInvalid level. Please enter a valid number."
-      level-out-of-range: "&cLevel must be between 1 and %max_level%."
-      success: "&aSuccessfully set %player%'s level to %level%."
-      failed: "&cFailed to set player level. Please try again."
-      notify: "&aYour VeinMiner level has been set to %level% by %admin%."
-
-  about:
-    header: "&a=== VeinMiner ==="
-    version: "&eVersion: %version%"
-    author: "&eAuthor: BischoffTV"
-    description: "&eDescription: %description%"
-    usage: "&aHold shift while mining to activate VeinMiner!"
+    info: "&aYour VeinMiner level is &6%level% &a(&6%experience%&a/&6%next_level_experience%&a XP)"
+    set: "&aSet %player%'s VeinMiner level to &6%level%&a."
+    up: "&aYou have reached VeinMiner level &6%level%&a!"
 
   reload:
     success: "&aVeinMiner configuration has been reloaded."
 
-  level-up: "&a&lLEVEL UP! &aYou are now level %level%! You can now mine up to %max_blocks% blocks at once."
+  sync:
+    success: "&aVeinMiner data has been synchronized."
+
+  about:
+    header: "&6=== VeinMiner Plugin ==="
+    version: "&aVersion: &6%version%"
+    author: "&aAuthor: &6BischoffTV"
+    website: "&aWebsite: &6https://github.com/BischoffTV/Veinminer"
+
+  help:
+    header: "&6=== VeinMiner Help ==="
+    command: "&a/%command% &7- %description%"
+    toggle: "&a/vmtoggle &7- Toggle VeinMiner on/off"
+    tool: "&a/veinminer tool <type> &7- Toggle a specific tool type"
+    level: "&a/vmlevel &7- Check your VeinMiner level"
+    achievements: "&a/veinminer achievements &7- View your achievements"
+    reload: "&a/veinminerreload &7- Reload the plugin configuration"
+    about: "&a/veinminerabout &7- View information about the plugin"
+    usage: "&a/veinminer &7- Open the main menu"
+    gui: "&a/veinminer &7- Open the main menu"
+
+  error:
+    player-data-not-found: "&cFailed to load player data. Please try again later."
+    database-error: "&cA database error occurred. Please contact an administrator."
 
   achievements:
-    load-failed: "&cFailed to load your achievements. Please try again or contact an administrator."
-    none-configured: "&cNo achievements are currently configured."
-    system-disabled: "&cThe VeinMiner achievement system is currently disabled."
-    gui:
-      title: "VeinMiner Achievements"
-      not-started: "&c&lLOCKED"
-      in-progress: "&e&lIN PROGRESS: &e%progress%/%total%"
-      completed: "&a&lCOMPLETED"
-      ready-to-claim: "&6&lREADY TO CLAIM!"
-      click-to-claim: "&eClick to claim your rewards!"
-      previous-page: "&7Previous Page"
-      next-page: "&7Next Page"
-      close: "&cClose"
-      error: "&cAn error occurred while opening the achievements menu. Please try again."
-    claim:
-      success: "&aYou have claimed the achievement &6%name%&a!"
-      rewards: "&aRewards: &e%rewards%"
-      money: "&a%amount% money"
-      items: "&a%items%"
-      failed: "&cFailed to claim achievement rewards. Please try again."
-      already-claimed: "&cYou have already claimed this achievement."
-    progress:
-      updated: "&aYou've made progress on the achievement &6%name%&a: &e%progress%/%total%"
-      completed: "&a&lACHIEVEMENT COMPLETED! &aYou've completed &6%name%&a! Open the achievements menu to claim your rewards."
+    unlocked: "&aYou have unlocked the achievement &6%achievement%&a!"
+    reward: "&aYou received &6%reward%&a for completing the achievement."
+    disabled: "&cThe achievement system is currently disabled."
+    claimed: "&aYou have successfully claimed the rewards for this achievement!"
+    already-claimed: "&cYou have already claimed the rewards for this achievement."
 
-  prefix: "&8[&aVeinMiner&8]&r "
+  skills:
+    disabled: "&cThe skill system is currently disabled."
+    upgraded: "&aYou have upgraded your skill!"
+    upgrade-failed: "&cFailed to upgrade skill. You may not have enough skill points or the skill is already at maximum level."
+    reset: "&aYour skills have been reset. All skill points have been refunded."
+    reset-failed: "&cFailed to reset skills. You may not have any skills to reset or not enough money."
+    reset-cost: "&aResetting skills costs &6%cost%&a."
+    not-enough-money: "&cYou don't have enough money to reset your skills. Cost: &e%cost%&c, Your balance: &e%balance%&c."
 
-# Discord Webhook Messages
-discord:
-  embed:
-    title: "VeinMiner Activity Log"
-    color: 5763719  # Green color in decimal
-    fields:
-      - name: "Player"
-        value: "%player%"
-        inline: true
-      - name: "Blocks Destroyed"
-        value: "%blocks%"
-        inline: true
-      - name: "Location"
-        value: "World: %world%\nX: %x%\nY: %y%\nZ: %z%"
-        inline: false
-      - name: "Items Collected"
-        value: "%items%"
-        inline: false
-      - name: "Tool"
-        value: "%tool%"
-        inline: true
-      - name: "Enchantments"
-        value: "%enchantments%"
-        inline: true
+gui:
+  # Achievement GUI
+  achievements-none-title: "&cNo Achievements Available"
+  achievements-none-lore: "&7No achievements have been defined."
+  achievements-progress: "Progress: "
+  achievements-completed: "✓ Completed!"
+  achievements-not-completed: "✗ Not completed"
+  achievements-rewards: "Rewards:"
+  achievements-money: "money"
+  achievements-title-item: "Achievement: %name%"
+  achievements-lore-item: "%description%\nProgress: %progress%/%required%"
+  achievements-claim: "Click to claim rewards"
+  achievements-claimed: "Rewards claimed"
+
+  # Main GUI items
+  main-title: "VeinMiner Menu"
+  toggle-enabled: "VeinMiner: Enabled"
+  toggle-disabled: "VeinMiner: Disabled"
+  toggle-lore-enabled: "Click to disable VeinMiner"
+  toggle-lore-disabled: "Click to enable VeinMiner"
+  toggle-hint-1: "When enabled, hold shift while mining"
+  toggle-hint-2: "to activate VeinMiner."
+
+  # Tool settings
+  tools-title: "Tools Settings"
+  tools-lore: "Configure which tools to use"
+
+  # Level information
+  level-title: "Level Information"
+  level-level: "Level: "
+  level-xp: "XP: "
+  level-max-blocks: "Max Blocks: "
+  level-next: "XP for Level "
+  level-click: "Click for detailed level information"
+
+  # Skills section
+  skills-title: "Skills"
+  skills-lore: "Manage your VeinMiner skills"
+  skills-disabled: "Skills Disabled"
+  skills-disabled-lore: "Skills are disabled on this server"
+
+  # Achievements section
+  achievements-title: "Achievements"
+  achievements-lore: "View your achievements"
+  achievements-disabled: "Achievements Disabled"
+  achievements-disabled-lore: "Achievements are disabled on this server"
+
+  # About and help sections
+  about-title: "About"
+  about-lore: "Information about VeinMiner"
+  help-title: "Help"
+  help-lore: "View help information"
+
+  # Navigation
+  back-title: "Back to Main Menu"
+  back-lore: "Return to the main menu"

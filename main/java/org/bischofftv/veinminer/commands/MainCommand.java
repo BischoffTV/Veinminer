@@ -57,8 +57,13 @@ public class MainCommand implements CommandExecutor, TabCompleter {
                     plugin.getConfigManager().reload();
                 }
 
+                if (plugin.getLevelManager() != null) {
+                    plugin.getLevelManager().reloadLevelSettings();
+                }
+
+                // Reload achievements to ensure new ones are registered
                 if (plugin.getAchievementManager() != null) {
-                    plugin.getAchievementManager().loadSettings();
+                    plugin.getAchievementManager().reloadAchievements();
                 }
 
                 plugin.restartAutoSaveTask();

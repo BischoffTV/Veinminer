@@ -1,37 +1,35 @@
 package org.bischofftv.veinminer.commands;
 
 import org.bischofftv.veinminer.Veinminer;
-import org.bukkit.ChatColor;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 
-public class AchievementsCommand implements CommandExecutor {
+public class SkillCommand implements CommandExecutor {
 
     private final Veinminer plugin;
 
-    public AchievementsCommand(Veinminer plugin) {
+    public SkillCommand(Veinminer plugin) {
         this.plugin = plugin;
     }
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (!(sender instanceof Player)) {
-            sender.sendMessage(plugin.getMessageManager().getMessage("messages.command.player-only", "This command can only be used by players."));
+            sender.sendMessage(plugin.getMessageManager().formatMessage("messages.command.player-only"));
             return true;
         }
 
         Player player = (Player) sender;
 
-        // Check if achievements are enabled
-        if (!plugin.getAchievementManager().isEnabled()) {
-            player.sendMessage(ChatColor.RED + "Achievements are currently disabled.");
+        if (!plugin.getSkillManager().isEnabled()) {
+            player.sendMessage(plugin.getMessageManager().formatMessage("messages.skills.disabled"));
             return true;
         }
 
-        // Open the achievements GUI
-        plugin.getAchievementGUI().openAchievementGUI(player);
+        // Open the skill GUI
+        plugin.getSkillGUI().openSkillGUI(player);
         return true;
     }
 }

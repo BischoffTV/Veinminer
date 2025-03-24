@@ -1,11 +1,9 @@
 package org.bischofftv.veinminer.commands;
 
 import org.bischofftv.veinminer.Veinminer;
-import org.bukkit.ChatColor;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
-import org.bukkit.entity.Player;
 
 public class ReloadCommand implements CommandExecutor {
 
@@ -17,44 +15,36 @@ public class ReloadCommand implements CommandExecutor {
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
-        if (!sender.hasPermission("veinminer.reload")) {
-            sender.sendMessage(plugin.getMessageManager().getMessage("messages.command.no-permission"));
+        // Check permission
+        if (!sender.hasPermission("veinminer.admin.reload")) {
+            sender.sendMessage(plugin.getMessageManager().getMessage("messages.command.no-permission", "You don't have permission to use this command."));
             return true;
         }
 
-        // Save all player data before reloading
-        plugin.getPlayerDataManager().saveAllData();
+        // Reload configurations
+        plugin.reloadConfig();
+        plugin.reloadLangConfig();
+        plugin.reloadMessagesConfig();
 
-        // Reload configuration
-        plugin.getConfigManager().reloadConfig();
-        plugin.getMessageManager().reloadMessages();
-
-        // Reinitialize level manager to load new level settings
-        plugin.getLevelManager().reloadLevelSettings();
-
-        // Reload achievement settings and force reload for all players
-        if (plugin.getAchievementManager().isEnabled()) {
-            plugin.getAchievementManager().loadSettings();
-
-            // Force reload achievements for all online players
-            for (Player player : plugin.getServer().getOnlinePlayers()) {
-                // Clear existing achievement data for this player
-                plugin.getAchievementManager().clearPlayerAchievements(player);
-                // Load achievements again
-                plugin.getAchievementManager().loadPlayerAchievements(player);
-            }
-
-            sender.sendMessage(ChatColor.GREEN + "Achievements have been reloaded for all online players.");
+        // Reload managers
+        if (plugin.getConfigManager() != null) {
+            plugin.getConfigManager().reload();
         }
 
-        // Restart auto-save task with new interval
+        if (plugin.getLevelManager() != null) {
+            plugin.getLevelManager().reloadLevelSettings();
+        }
+
+        // Reload achievements last to ensure database schema is updated
+        if (plugin.getAchievementManager() != null) {
+            plugin.getAchievementManager().reloadAchievements();
+        }
+
+        // Restart auto-save task
         plugin.restartAutoSaveTask();
 
-        // Force sync to ensure changes are propagated
-        plugin.forceSyncDataNow();
-
-        sender.sendMessage(plugin.getMessageManager().getMessage("messages.reload.success"));
-
+        // Send confirmation message
+        sender.sendMessage(plugin.getMessageManager().formatMessage("messages.reload.success", "VeinMiner configuration has been reloaded."));
         return true;
     }
 }

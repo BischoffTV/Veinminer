@@ -5,9 +5,6 @@ import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 
-import java.util.HashMap;
-import java.util.Map;
-
 public class AboutCommand implements CommandExecutor {
 
     private final Veinminer plugin;
@@ -18,16 +15,10 @@ public class AboutCommand implements CommandExecutor {
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
-        Map<String, String> placeholders = new HashMap<>();
-        placeholders.put("version", plugin.getDescription().getVersion());
-        placeholders.put("description", plugin.getDescription().getDescription());
-
-        sender.sendMessage(plugin.getMessageManager().getMessage("messages.about.header"));
-        sender.sendMessage(plugin.getMessageManager().getMessage("messages.about.version", placeholders));
-        sender.sendMessage(plugin.getMessageManager().getMessage("messages.about.author"));
-        sender.sendMessage(plugin.getMessageManager().getMessage("messages.about.description", placeholders));
-        sender.sendMessage(plugin.getMessageManager().getMessage("messages.about.usage"));
-
+        sender.sendMessage(plugin.getMessageManager().formatMessage("messages.about.header"));
+        sender.sendMessage(plugin.getMessageManager().formatMessage("messages.about.version", "%version%", plugin.getDescription().getVersion()));
+        sender.sendMessage(plugin.getMessageManager().formatMessage("messages.about.author"));
+        sender.sendMessage(plugin.getMessageManager().formatMessage("messages.about.website"));
         return true;
     }
 }
