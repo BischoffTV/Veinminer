@@ -41,8 +41,8 @@ public class UpdateChecker implements Listener {
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
             try {
                 String currentVersion = plugin.getDescription().getVersion();
-                latestVersion = fetchLatestVersion(); // Korrigierter Methodenname
-                // latestVersion wird nun über die fetchLatestVersion Methode befüllt
+                latestVersion = getLatestVersionFromSpigot(); // Korrigierter Methodenaufruf
+                //getLatestVersion(); // Entferne diese Zeile
 
                 if (latestVersion != null && !latestVersion.isEmpty()) {
                     // Compare versions
@@ -68,7 +68,7 @@ public class UpdateChecker implements Listener {
      * @return The latest version
      * @throws IOException If an error occurs
      */
-    private String fetchLatestVersion() throws IOException { // Umbenannt von getLatestVersion
+    private String getLatestVersionFromSpigot() throws IOException { // Umbenannte Methode
         URL url = new URL("https://api.spigotmc.org/legacy/update.php?resource=" + resourceId);
         HttpURLConnection connection = (HttpURLConnection) url.openConnection();
         connection.setRequestMethod("GET");

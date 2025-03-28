@@ -1,10 +1,10 @@
 name: Veinminer
-version: '1.2.0'
+version: '1.2.1'
 main: org.bischofftv.veinminer.Veinminer
 api-version: '1.21'
 description: A plugin that allows players to mine connected blocks of the same type at once.
 author: BischoffTV
-softdepend: [WorldGuard]
+softdepend: [WorldGuard, PlaceholderAPI]
 commands:
   veinminer:
     description: Main command for VeinMiner
@@ -41,28 +41,21 @@ commands:
     description: VeinMiner admin commands
     usage: /vmadmin [debug|reload|sync|stats|bstats]
     permission: veinminer.admin
+  vmplaceholder:
+    description: Manage PlaceholderAPI integration
+    usage: /vmplaceholder reload
+    permission: veinminer.admin
 permissions:
   veinminer.use:
     description: Allows the player to use VeinMiner
-    default: true
   veinminer.tool.pickaxe:
     description: Allows the player to use VeinMiner with pickaxes
-    default: true
   veinminer.tool.axe:
     description: Allows the player to use VeinMiner with axes
-    default: true
   veinminer.tool.shovel:
     description: Allows the player to use VeinMiner with shovels
-    default: true
   veinminer.tool.hoe:
     description: Allows the player to use VeinMiner with hoes
-    default: true
   veinminer.admin:
     description: Allows access to all VeinMiner admin commands
     default: op
-    children:
-      veinminer.use: true
-      veinminer.tool.pickaxe: true
-      veinminer.tool.axe: true
-      veinminer.tool.shovel: true
-      veinminer.tool.hoe: true

@@ -28,7 +28,7 @@ public class MainGUI {
     public void openMainGUI(Player player) {
         // Create inventory with title from lang.yml
         String title = ChatColor.translateAlternateColorCodes('&', plugin.getMessageManager().getMessage("gui.main-title", "VeinMiner Menu"));
-        Inventory inventory = Bukkit.createInventory(null, 27, ChatColor.GREEN + "VeinMiner Menu");
+        Inventory inventory = Bukkit.createInventory(null, 36, ChatColor.GREEN + "VeinMiner Menu");
 
         // Get player data
         PlayerData playerData = plugin.getPlayerDataManager().getPlayerData(player.getUniqueId());
@@ -60,56 +60,57 @@ public class MainGUI {
                 ChatColor.AQUA + plugin.getMessageManager().getMessage("gui.tools-title", "Tools Settings"),
                 ChatColor.GRAY + plugin.getMessageManager().getMessage("gui.tools-lore", "Configure which tools to use")));
 
-        // Level Information
-        int level = playerData.getLevel();
-        int xp = playerData.getExperience();
-        int maxBlocks = plugin.getLevelManager().getMaxBlocksForLevel(level);
-        int nextLevelXp = plugin.getLevelManager().getXpForNextLevel(level);
+        // Level Information - only show if level system is enabled
+        if (plugin.getLevelManager().isEnabled()) {
+            int level = playerData.getLevel();
+            int xp = playerData.getExperience();
+            int maxBlocks = plugin.getLevelManager().getMaxBlocksForLevel(level);
+            int nextLevelXp = plugin.getLevelManager().getXpForNextLevel(level);
 
-        // Create level information item with the exact format from the screenshot
-        List<String> levelLore = new ArrayList<>();
-        levelLore.add(ChatColor.YELLOW + plugin.getMessageManager().getMessage("gui.level-level", "Level: ") + ChatColor.GOLD + level);
-        levelLore.add(ChatColor.YELLOW + plugin.getMessageManager().getMessage("gui.level-xp", "XP: ") + ChatColor.GOLD + xp);
-        levelLore.add(ChatColor.YELLOW + plugin.getMessageManager().getMessage("gui.level-max-blocks", "Max Blocks: ") + ChatColor.GOLD + maxBlocks);
-        levelLore.add(ChatColor.YELLOW + plugin.getMessageManager().getMessage("gui.level-next", "XP for Level ") + (level + 1) + ": " + ChatColor.GOLD + nextLevelXp);
-        levelLore.add(ChatColor.GRAY + plugin.getMessageManager().getMessage("gui.level-click", "Click for detailed level information"));
+            // Create level information item with the exact format from the screenshot
+            List<String> levelLore = new ArrayList<>();
+            levelLore.add(ChatColor.YELLOW + plugin.getMessageManager().getMessage("gui.level-level", "Level: ") + ChatColor.GOLD + level);
+            levelLore.add(ChatColor.YELLOW + plugin.getMessageManager().getMessage("gui.level-xp", "XP: ") + ChatColor.GOLD + xp);
+            levelLore.add(ChatColor.YELLOW + plugin.getMessageManager().getMessage("gui.level-max-blocks", "Max Blocks: ") + ChatColor.GOLD + maxBlocks);
+            levelLore.add(ChatColor.YELLOW + plugin.getMessageManager().getMessage("gui.level-next", "XP for Level ") + (level + 1) + ": " + ChatColor.GOLD + nextLevelXp);
+            levelLore.add(ChatColor.GRAY + plugin.getMessageManager().getMessage("gui.level-click", "Click for detailed level information"));
 
-        ItemStack levelItem = createItem(Material.EXPERIENCE_BOTTLE,
-                ChatColor.DARK_PURPLE + plugin.getMessageManager().getMessage("gui.level-title", "Level Information"),
-                levelLore);
-        inventory.setItem(14, levelItem);
+            ItemStack levelItem = createItem(Material.EXPERIENCE_BOTTLE,
+                    ChatColor.DARK_PURPLE + plugin.getMessageManager().getMessage("gui.level-title", "Level Information"),
+                    levelLore);
+            inventory.setItem(14, levelItem);
+        }
 
-        // Skills
+        // Skills - only show if skill system is enabled
         if (plugin.getSkillManager().isEnabled()) {
             inventory.setItem(16, createItem(Material.ENCHANTED_BOOK,
                     ChatColor.GOLD + plugin.getMessageManager().getMessage("gui.skills-title", "Skills"),
                     ChatColor.GRAY + plugin.getMessageManager().getMessage("gui.skills-lore", "Manage your VeinMiner skills")));
-        } else {
-            inventory.setItem(16, createItem(Material.BARRIER,
-                    ChatColor.RED + plugin.getMessageManager().getMessage("gui.skills-disabled", "Skills Disabled"),
-                    ChatColor.GRAY + plugin.getMessageManager().getMessage("gui.skills-disabled-lore", "Skills are disabled on this server")));
         }
 
-        // Achievements
+        // Achievements - only show if achievement system is enabled
         if (plugin.getAchievementManager().isEnabled()) {
-            inventory.setItem(20, createItem(Material.GOLD_INGOT,
+            inventory.setItem(19, createItem(Material.GOLD_INGOT,
                     ChatColor.GOLD + plugin.getMessageManager().getMessage("gui.achievements-title", "Achievements"),
                     ChatColor.GRAY + plugin.getMessageManager().getMessage("gui.achievements-lore", "View your achievements")));
-        } else {
-            inventory.setItem(20, createItem(Material.BARRIER,
-                    ChatColor.RED + plugin.getMessageManager().getMessage("gui.achievements-disabled", "Achievements Disabled"),
-                    ChatColor.GRAY + plugin.getMessageManager().getMessage("gui.achievements-disabled-lore", "Achievements are disabled on this server")));
+        }
+
+        // Top Players - add to slot 20 to maintain the pattern
+        if (plugin.getConfig().getBoolean("gui.show-top-players", true)) {
+            inventory.setItem(21, createItem(Material.PLAYER_HEAD,
+                    ChatColor.AQUA + plugin.getMessageManager().getMessage("gui.top-players-title", "Top Players"),
+                    ChatColor.GRAY + plugin.getMessageManager().getMessage("gui.top-players-lore", "View top players")));
         }
 
         // About
         if (plugin.getConfig().getBoolean("gui.show-about", true)) {
-            inventory.setItem(22, createItem(Material.OAK_SIGN,
+            inventory.setItem(23, createItem(Material.OAK_SIGN,
                     ChatColor.WHITE + plugin.getMessageManager().getMessage("gui.about-title", "About"),
                     ChatColor.GRAY + plugin.getMessageManager().getMessage("gui.about-lore", "Information about VeinMiner")));
         }
 
         // Help
-        inventory.setItem(24, createItem(Material.APPLE,
+        inventory.setItem(25, createItem(Material.APPLE,
                 ChatColor.RED + plugin.getMessageManager().getMessage("gui.help-title", "Help"),
                 ChatColor.GRAY + plugin.getMessageManager().getMessage("gui.help-lore", "View help information")));
 
@@ -162,3 +163,4 @@ public class MainGUI {
         return item;
     }
 }
+

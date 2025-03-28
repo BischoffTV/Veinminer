@@ -7,9 +7,11 @@ import org.bischofftv.veinminer.config.ConfigManager;
 import org.bischofftv.veinminer.database.DatabaseManager;
 import org.bischofftv.veinminer.gui.MainGUI;
 import org.bischofftv.veinminer.gui.SkillGUI;
+import org.bischofftv.veinminer.gui.TopPlayersGUI;
 import org.bischofftv.veinminer.hooks.WorldGuardHook;
 import org.bischofftv.veinminer.listeners.*;
 import org.bischofftv.veinminer.logging.MiningLogger;
+import org.bischofftv.veinminer.placeholders.VeinMinerPlaceholders;
 import org.bischofftv.veinminer.skills.SkillManager;
 import org.bischofftv.veinminer.utils.*;
 import org.bstats.bukkit.Metrics;
@@ -42,6 +44,8 @@ public class Veinminer extends JavaPlugin {
     private MainGUI mainGUI;
     private SkillGUI skillGUI;
     private SkillManager skillManager;
+    private TopPlayersGUI topPlayersGUI;
+    private VeinMinerPlaceholders placeholderExpansion;
     private BukkitTask autoSaveTask;
     private boolean debugMode;
     private VeinMinerUtils veinMinerUtils;
@@ -217,6 +221,7 @@ public class Veinminer extends JavaPlugin {
         this.mainGUI = new MainGUI(this);
         this.skillManager = new SkillManager(this);
         this.skillGUI = new SkillGUI(this);
+        this.topPlayersGUI = new TopPlayersGUI(this);
         this.miningLogger = new MiningLogger(this);
 
         // Initialize WorldGuard hook
@@ -257,6 +262,7 @@ public class Veinminer extends JavaPlugin {
         safeRegisterCommand("veinminerabout", new AboutCommand(this));
         safeRegisterCommand("veinminerhelp", new HelpCommand(this));
         safeRegisterCommand("vmskill", new SkillCommand(this));
+        safeRegisterCommand("vmplaceholder", new PlaceholderCommand(this));
 
         // Also register the tab completer for the main command
         if (getCommand("veinminer") != null) {
@@ -269,6 +275,7 @@ public class Veinminer extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new AchievementListener(this), this);
         getServer().getPluginManager().registerEvents(new GUIListener(this), this);
         getServer().getPluginManager().registerEvents(new SkillGUIListener(this), this);
+        getServer().getPluginManager().registerEvents(new TopPlayersGUIListener(this), this);
 
         // Add this line to the onEnable method, after initializing the other commands
         adminCommand = new AdminCommand(this);
@@ -297,6 +304,34 @@ public class Veinminer extends JavaPlugin {
             this.updateChecker = new UpdateChecker(this, RESOURCE_ID);
         }
 
+        // Register PlaceholderAPI expansion if available
+        if (getServer().getPluginManager().getPlugin("PlaceholderAPI") != null) {
+            getLogger().info("PlaceholderAPI found! Registering placeholders...");
+
+            // Unregister any existing expansion first to avoid duplicates
+            if (this.placeholderExpansion != null) {
+                try {
+                    this.placeholderExpansion.unregister();
+                } catch (Exception e) {
+                    getLogger().warning("Failed to unregister existing PlaceholderAPI expansion: " + e.getMessage());
+                }
+            }
+
+            // Create and register the new expansion
+            this.placeholderExpansion = new VeinMinerPlaceholders(this);
+
+            // Register with a delay to ensure everything is loaded
+            getServer().getScheduler().runTaskLater(this, () -> {
+                if (this.placeholderExpansion.register()) {
+                    getLogger().info("Successfully registered VeinMiner placeholders!");
+                } else {
+                    getLogger().warning("Failed to register VeinMiner placeholders!");
+                }
+            }, 40L); // 2 seconds delay
+        } else {
+            getLogger().info("PlaceholderAPI not found. Placeholders will not be available.");
+        }
+
         getLogger().info("VeinMiner has been enabled!");
     }
 
@@ -314,6 +349,15 @@ public class Veinminer extends JavaPlugin {
         // Save all achievement data
         if (achievementManager != null) {
             achievementManager.saveAllAchievements();
+        }
+
+        // Unregister PlaceholderAPI expansion if it exists
+        if (placeholderExpansion != null) {
+            try {
+                placeholderExpansion.unregister();
+            } catch (Exception e) {
+                getLogger().warning("Failed to unregister PlaceholderAPI expansion: " + e.getMessage());
+            }
         }
 
         // Close database connection
@@ -352,7 +396,7 @@ public class Veinminer extends JavaPlugin {
         }
     }
 
-    // Modify the startAutoSaveTask method to include synchronization
+    // Start auto-save task including synchronization
     public void startAutoSaveTask() {
         // Cancel existing task if running
         if (autoSaveTask != null) {
@@ -404,13 +448,21 @@ public class Veinminer extends JavaPlugin {
             }
         }, intervalTicks, intervalTicks);
 
-        // Add an additional task for more frequent synchronization (every 30 seconds)
+        // Additional task for more frequent synchronization (every 30 seconds)
         getServer().getScheduler().runTaskTimer(this, () -> {
             if (databaseManager != null && !databaseManager.isFallbackMode()) {
                 if (debugMode) {
                     getLogger().info("[Debug] Running frequent synchronization check...");
                 }
                 databaseManager.synchronizeData();
+            }
+
+            // Also refresh PlaceholderAPI cache if it exists
+            if (placeholderExpansion != null) {
+                placeholderExpansion.forceRefreshCache();
+                if (debugMode) {
+                    getLogger().info("[Debug] Refreshed PlaceholderAPI cache.");
+                }
             }
         }, 600L, 600L); // 30 seconds = 600 ticks
 
@@ -485,6 +537,22 @@ public class Veinminer extends JavaPlugin {
 
     public SkillManager getSkillManager() {
         return skillManager;
+    }
+
+    /**
+     * Get the top players GUI
+     * @return The top players GUI
+     */
+    public TopPlayersGUI getTopPlayersGUI() {
+        return topPlayersGUI;
+    }
+
+    /**
+     * Get the PlaceholderAPI expansion
+     * @return The PlaceholderAPI expansion
+     */
+    public VeinMinerPlaceholders getPlaceholderExpansion() {
+        return placeholderExpansion;
     }
 
     public boolean isDebugMode() {
@@ -567,8 +635,8 @@ public class Veinminer extends JavaPlugin {
         }
     }
 
-    // Modify the saveDefaultMessagesConfig method to handle the case when messages.yml doesn't exist
-    private void saveDefaultMessagesConfig() {
+    // Save default messages.yml if it doesn't exist
+    public void saveDefaultMessagesConfig() {
         if (messagesConfigFile == null) {
             messagesConfigFile = new File(getDataFolder(), "messages.yml");
         }
@@ -596,7 +664,7 @@ public class Veinminer extends JavaPlugin {
         }
     }
 
-    // Add a method to update the database schema if needed
+    // Update database schema if needed
     private void updateDatabaseSchema() {
         if (databaseManager != null && !databaseManager.isFallbackMode()) {
             try {

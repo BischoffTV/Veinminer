@@ -30,7 +30,7 @@ messages:
     header: "&6=== VeinMiner Plugin ==="
     version: "&aVersion: &6%version%"
     author: "&aAuthor: &6BischoffTV"
-    website: "&aWebsite: &6https://github.com/BischoffTV/Veinminer"
+    website: "&aWebsite: &6https://https://github.com/BischoffTV/Veinminer"
 
   help:
     header: "&6=== VeinMiner Help ==="
@@ -42,7 +42,7 @@ messages:
     reload: "&a/veinminerreload &7- Reload the plugin configuration"
     about: "&a/veinminerabout &7- View information about the plugin"
     usage: "&a/veinminer &7- Open the main menu"
-    gui: "&a/veinminer &7- Open the main menu"
+    gui: "&a/veinminer gui &7- Open the main menu"
 
   error:
     player-data-not-found: "&cFailed to load player data. Please try again later."
@@ -64,6 +64,9 @@ messages:
     reset-cost: "&aResetting skills costs &6%cost%&a."
     not-enough-money: "&cYou don't have enough money to reset your skills. Cost: &e%cost%&c, Your balance: &e%balance%&c."
 
+  top-players:
+    disabled: "&cThe top players feature is currently disabled."
+
 gui:
   # Achievement GUI
   achievements-none-title: "&cNo Achievements Available"
@@ -74,7 +77,8 @@ gui:
   achievements-rewards: "Rewards:"
   achievements-money: "money"
   achievements-title-item: "Achievement: %name%"
-  achievements-lore-item: "%description%\nProgress: %progress%/%required%"
+  achievements-lore-item: "%description%
+Progress: %progress%/%required%"
   achievements-claim: "Click to claim rewards"
   achievements-claimed: "Rewards claimed"
 
@@ -110,6 +114,16 @@ gui:
   achievements-lore: "View your achievements"
   achievements-disabled: "Achievements Disabled"
   achievements-disabled-lore: "Achievements are disabled on this server"
+
+  # Top Players section
+  top-players-title: "Top Players"
+  top-players-lore: "View top players"
+  top-players-level-title: "Top Players by Level"
+  top-players-level-lore: "Click to view top players by level"
+  top-players-achievements-title: "Top Players by Achievements"
+  top-players-achievements-lore: "Click to view top players by achievements"
+  top-players-blocks-title: "Top Players by Blocks Mined"
+  top-players-blocks-lore: "Click to view top players by blocks mined"
 
   # About and help sections
   about-title: "About"

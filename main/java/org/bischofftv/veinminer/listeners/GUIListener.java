@@ -62,8 +62,8 @@ public class GUIListener implements Listener {
                 openToolsGUI(player);
             }
 
-            // Level Information
-            else if (event.getSlot() == 14) {
+            // Level Information - only if level system is enabled
+            else if (event.getSlot() == 14 && plugin.getLevelManager().isEnabled()) {
                 player.closeInventory();
 
                 // Get player level data
@@ -80,26 +80,32 @@ public class GUIListener implements Listener {
                 player.sendMessage(message);
             }
 
-            // Skills
+            // Skills - only if skill system is enabled
             else if (event.getSlot() == 16 && plugin.getSkillManager().isEnabled()) {
                 player.closeInventory();
                 plugin.getSkillGUI().openSkillGUI(player);
             }
 
-            // Achievements
-            else if (event.getSlot() == 20 && plugin.getAchievementManager().isEnabled()) {
+            // Achievements - only if achievement system is enabled
+            else if (event.getSlot() == 19 && plugin.getAchievementManager().isEnabled()) {
                 player.closeInventory();
                 plugin.getAchievementGUI().openAchievementGUI(player);
             }
 
+            // Top Players - only if enabled in config
+            else if (event.getSlot() == 21 && plugin.getConfig().getBoolean("gui.show-top-players", true)) {
+                player.closeInventory();
+                plugin.getTopPlayersGUI().openTopPlayersGUI(player);
+            }
+
             // About
-            else if (event.getSlot() == 22) {
+            else if (event.getSlot() == 23) {
                 player.closeInventory();
                 player.performCommand("veinminerabout");
             }
 
             // Help
-            else if (event.getSlot() == 24) {
+            else if (event.getSlot() == 25) {
                 player.closeInventory();
                 player.performCommand("veinminerhelp");
             }
