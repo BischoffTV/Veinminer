@@ -1,94 +1,122 @@
 # VeinMiner: Ultimate Mining Enhancement
 
-VeinMiner is the ultimate mining enhancement for your Minecraft server. This plugin allows players to mine entire veins of ores, logs, or other blocks by simply holding shift while breaking a block. Perfect for survival servers, skyblock, or any server looking to enhance the mining experience.
+VeinMiner is the ultimate mining enhancement for your Minecraft server! This plugin allows players to mine entire veins of ores, logs, or other blocks simply by holding shift while breaking a block. Perfect for survival servers, Skyblock, or any server looking to enhance the mining experience.
 
-✨ Features
+## ✨ Features
 
-* **Instant Vein Mining:** Break entire ore veins, log clusters, or other block groups with a single block break.
-* **Advanced Skill System:** Players level up as they mine, unlocking the ability to mine larger veins and learn special abilities.
-* **Achievement System:** Earn achievements for mining specific blocks, reaching certain levels, and more.
-* **WorldGuard Integration:** Define regions where VeinMiner is enabled or disabled, customizing the mining experience to fit your server environment.
-* **User-Friendly GUI:** Intuitive menu system for managing settings and viewing achievements.
-* **Tool Support:** Works with all mining tools - pickaxes, axes, shovels, and hoes.
-* **Enchantment Compatible:** Full support for Fortune and Silk Touch enchantments.
-* **Balanced Gameplay:** Configurable durability impact and hunger cost to maintain game balance.
-* **Discord Integration:** Track mining activity with detailed Discord webhook notifications.
-* **Multi-Server Support:** Seamless synchronization of player data across multiple servers.
-* **Visual Indicators:** Clear visual feedback when VeinMiner is active or inactive.
-* **User-Friendly Commands:** Simple commands with tab completion for easy management.
-* **Permissions Support:** Control who can use the plugin with detailed permission nodes.
-* **Economy Integration:** Reward players with in-game currency for achievements.
-* **Update Checker:** Notifies administrators when a new version of VeinMiner is available.
+- Instant Vein Mining - Break entire ore veins, log clusters, or other block groups with a single block break
+- Advanced Progression System - Players level up as they mine, unlocking the ability to mine larger veins
+- New Skill System - Upgrade mining efficiency via the in-game GUI
+- WorldGuard Integration - Fully compatible with protected regions
+- Achievement System - Earn achievements for mining specific blocks, reaching certain levels, and more
+- Update Checker - Get notified when a new plugin update is available
+- User-Friendly GUI - Intuitive menu system for managing settings and viewing achievements
+- Tool Support - Works with all mining tools - pickaxes, axes, shovels, and hoes
+- Enchantment Compatible - Full support for Fortune and Silk Touch enchantments
+- Balanced Gameplay - Configurable durability impact and hunger cost to maintain game balance
+- Discord Integration - Track mining activity with detailed Discord webhook notifications
+- Multi-Server Support - Seamless synchronization of player data across multiple servers
+- Visual Indicators - Clear visual feedback when VeinMiner is active or inactive
+- User-Friendly Commands - Simple commands with tab completion for easy management
+- Flexible Permission System - Control who can use the plugin with detailed permission nodes and configurable requirements
+  - Global permission toggle for easy setup
+  - Tool-specific permission control
+  - Command-based permission management
+  - Configurable permission requirements per feature
+- Economy Integration - Reward players with in-game currency for achievements
 
-📜 Commands
+## Commands
 
-* `/veinminer` or `/vm` - Toggle VeinMiner on/off or Open the VeinMiner settings GUI.
-* `/veinminer on` - Enable VeinMiner
-* `/veinminer off` - Disable VeinMiner
-* `/veinminer tool <tooltype>` - Toggle for specific tools
-* `/veinminer level` - Check your current level and progress
-* `/veinminer achievements` - View your achievements
-* `/veinminerreload` - Reload the configuration
-* `/veinminerhelp` - Display help information
-* `/veinminerabout` - Show plugin information
+- `/veinminer` or `/vm` - Open the main VeinMiner GUI
+- `/veinminer on` - Enable VeinMiner
+- `/veinminer off` - Disable VeinMiner
+- `/veinminer toggle` - Toggle VeinMiner on/off
+- `/veinminer tool <tooltype>` - Toggle for specific tools
+- `/vmtoggle` - Toggle VeinMiner on/off
+- `/vmlevel` - Check your current level and progress
+- `/vmsetlevel <player> <level>` - Set a player's VeinMiner level (Admin)
+- `/vmsync` - Synchronize VeinMiner data across servers (Admin)
+- `/veinminerreload` - Reload the configuration (Admin)
+- `/veinminerabout` - Show plugin information
+- `/veinminerhelp` - Display help information
+- `/vmskill` - Open the skill menu
+- `/vmadmin [debug|reload|sync|stats|bstats]` - Admin commands for managing the plugin (Admin)
 
-⚙️ Configuration
+## Permissions
+
+- `veinminer.use` - Allows the player to use VeinMiner
+- `veinminer.tool.pickaxe` - Allows the player to use VeinMiner with pickaxes
+- `veinminer.tool.axe` - Allows the player to use VeinMiner with axes
+- `veinminer.tool.shovel` - Allows the player to use VeinMiner with shovels
+- `veinminer.tool.hoe` - Allows the player to use VeinMiner with hoes
+- `veinminer.admin` - Allows access to all VeinMiner admin commands (Default: op)
+
+## Placeholders
+
+- `%veinminer_level%` - Shows player's current level
+- `%veinminer_experience%` - Shows player's current XP
+- `%veinminer_blocks_mined%` - Shows total blocks mined
+- `%veinminer_achievements_completed%` - Shows completed achievements
+- `%veinminer_top_level_X%` - Shows top players by level (X = position 1-10)
+- `%veinminer_top_achievements_X%` - Shows top players by achievements (X = position 1-10)
+- `%veinminer_top_blocks_X%` - Shows top players by blocks mined (X = position 1-10)
+
+## ⚙️ Configuration
 
 VeinMiner is highly configurable:
+- Set the maximum number of blocks that can be mined at once
+- Configure durability impact on tools
+- Adjust hunger cost for balance
+- Define which blocks can be mined
+- Customize the leveling system
+- Set up achievements with custom rewards
+- Enable/disable Discord logging
+- Configure economy integration
+- Toggle WorldGuard compatibility
+- Enable the update checker for new versions
+- Configure permission requirements:
+  - Enable/disable permission requirements globally
+  - Set up tool-specific permissions
+  - Configure command permissions
+  - Customize permission nodes for different features
 
-* Set maximum blocks that can be mined at once.
-* Configure durability impact on tools.
-* Adjust hunger cost for balance.
-* Define which blocks can be mined.
-* Customize the skill system with individual abilities and level-up bonuses.
-* Set up achievements with custom rewards.
-* Configure WorldGuard regions for VeinMiner activation/deactivation.
-* Enable/disable Discord logging.
-* Configure economy integration.
-* And much more!
+## 🛡️ WorldGuard Integration
 
-🚀 Getting Started
+VeinMiner offers seamless integration with WorldGuard:
+- Define regions where VeinMiner is enabled or disabled
+- Create individual rules for each region
+- Offer players a custom mining experience in different areas of your world
+- Configure region-specific mining settings
+- Set up protected mining zones
+- Create mining arenas with custom rules
+- Protect important areas from vein mining
+- Customize mining behavior per region
 
-1.  Download and install the plugin.
-2.  Configure the settings in `config.yml`.
-3.  Set up MySQL for the progression and achievement systems.
-4.  Configure WorldGuard regions as needed.
-5.  Hold shift while mining to activate!
+## Achievement & Skill System
 
-🏆 Achievement System
+- Earn rewards for mining specific blocks
+- Gain recognition for reaching milestone levels
+- Claim in-game currency and item rewards
+- Track progress through an intuitive GUI
+- Upgrade skills directly in the GUI
+- Compete with other players for achievements
 
-The new achievement system allows players to:
+## Getting Started
 
-* Earn rewards for mining specific blocks.
-* Get recognition for reaching milestone levels.
-* Claim in-game currency and item rewards.
-* Track progress through an intuitive GUI.
-* Compete with other players for achievements.
+1. Download and install the plugin
+2. Configure the settings in config.yml
+3. Set up MySQL for the progression and achievement systems
+4. Enable WorldGuard support if needed
+5. Hold shift while mining to activate VeinMiner!
 
-✨ Skill System
+## ❓ Support
 
-The Skill system offers:
+If you encounter any issues or have suggestions, please visit our GitHub repository, contact us through SpigotMC or ask your question on the Discord.
 
-* Customizable skills with individual benefits.
-* Progress based unlocking of abilities.
-* Visual representation of skill progress in the GUI.
-* Options to customize skill effects, and costs.
+## Future Plans
 
-🛡️ WorldGuard Integration
-
-* Define regions where VeinMiner is enabled or disabled.
-* Create individual rules for each region.
-* Offer players a custom mining experience in different areas of your world.
-
-🤝 Support
-
-If you encounter any issues or have suggestions, please visit our GitHub repository or contact us through SpigotMC.
-
-🔮 Future Plans
-
-* More achievement types and rewards.
-* Additional customization options.
-* Enhanced GUI features.
-* Performance optimizations.
-* More skill customization.
-* And more based on your feedback!
+- More achievement types and rewards
+- Additional customization options
+- Enhanced GUI features
+- Performance optimizations
+- And more based on your feedback!
