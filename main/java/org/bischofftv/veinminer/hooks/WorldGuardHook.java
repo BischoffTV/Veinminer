@@ -76,6 +76,24 @@ public class WorldGuardHook {
     }
 
     /**
+     * Alias for canBreak to maintain compatibility with BlockBreakListener
+     *
+     * @param player The player trying to break the block
+     * @param location The location to check
+     * @return true if the player can break a block at this location, false otherwise
+     */
+    public boolean canBreakBlock(Player player, Location location) {
+        // If WorldGuard is not enabled, allow breaking
+        if (!worldGuardEnabled || worldGuardPlugin == null) {
+            return true;
+        }
+
+        // Create a block at this location to check
+        Block block = location.getBlock();
+        return canBreak(player, block);
+    }
+
+    /**
      * Checks if WorldGuard integration is enabled
      *
      * @return true if WorldGuard integration is enabled, false otherwise

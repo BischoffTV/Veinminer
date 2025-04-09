@@ -8,6 +8,11 @@ messages:
     no-permission: "&cYou don't have permission to use this command."
     invalid-args: "&cInvalid arguments. Use &6/%command% help&c for help."
     player-not-found: "&cPlayer not found: %player%"
+    invalid-tool: "&cInvalid tool type. Valid types: pickaxe, axe, shovel, hoe."
+    usage: "&cUsage: /veinminer [gui|toggle|tool|achievements|help|about]"
+
+  permission:
+    tool-not-allowed: "&cYou don't have permission to use VeinMiner with a %tool%."
 
   toggle:
     enabled: "&aVeinMiner has been enabled."
@@ -30,7 +35,7 @@ messages:
     header: "&6=== VeinMiner Plugin ==="
     version: "&aVersion: &6%version%"
     author: "&aAuthor: &6BischoffTV"
-    website: "&aWebsite: &6https://https://github.com/BischoffTV/Veinminer"
+    website: "&aWebsite: &6https://github.com/BischoffTV/Veinminer"
 
   help:
     header: "&6=== VeinMiner Help ==="
@@ -134,3 +139,4 @@ Progress: %progress%/%required%"
   # Navigation
   back-title: "Back to Main Menu"
   back-lore: "Return to the main menu"
+

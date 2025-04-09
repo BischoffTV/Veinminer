@@ -6,9 +6,6 @@ import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 
-import java.util.HashMap;
-import java.util.Map;
-
 public class ToggleCommand implements CommandExecutor {
 
     private final Veinminer plugin;
@@ -19,98 +16,48 @@ public class ToggleCommand implements CommandExecutor {
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
+        // Check if the sender is a player
         if (!(sender instanceof Player)) {
-            sender.sendMessage(plugin.getMessageManager().getMessage("messages.command.player-only", "This command can only be used by players."));
+            sender.sendMessage(plugin.getMessageManager().formatMessage("messages.command.player-only"));
             return true;
         }
 
         Player player = (Player) sender;
 
-        // Check permission if required
-        if (plugin.getConfig().getBoolean("permissions.require-permission", true)) {
-            String permission = plugin.getConfig().getString("permissions.use-permission", "veinminer.use");
-            if (!player.hasPermission(permission)) {
-                sender.sendMessage(plugin.getMessageManager().getMessage("messages.command.no-permission", "You don't have permission to use this command."));
-                return true;
-            }
-        }
-
-        if (args.length == 0) {
-            // Toggle veinminer on/off
-            boolean newState = !plugin.getPlayerDataManager().isVeinMinerEnabled(player);
-            plugin.getPlayerDataManager().setVeinMinerEnabled(player, newState);
-
-            if (newState) {
-                player.sendMessage(plugin.getMessageManager().getMessage("messages.toggle.enabled", "VeinMiner has been enabled."));
-            } else {
-                player.sendMessage(plugin.getMessageManager().getMessage("messages.toggle.disabled", "VeinMiner has been disabled."));
-            }
+        // Check if the player has permission to use the toggle command
+        if (!hasPermission(player, "veinminer.command.toggle")) {
+            player.sendMessage(plugin.getMessageManager().formatMessage("messages.command.no-permission"));
             return true;
         }
 
-        if (args.length >= 1) {
-            String subCommand = args[0].toLowerCase();
+        // Toggle VeinMiner for the player
+        boolean enabled = plugin.getPlayerDataManager().isVeinMinerEnabled(player);
+        plugin.getPlayerDataManager().setVeinMinerEnabled(player, !enabled);
 
-            switch (subCommand) {
-                case "on":
-                    plugin.getPlayerDataManager().setVeinMinerEnabled(player, true);
-                    player.sendMessage(plugin.getMessageManager().getMessage("messages.toggle.enabled", "VeinMiner has been enabled."));
-                    return true;
+        // Speichere die Einstellungen sofort
+        plugin.getPlayerDataManager().savePlayerSettings(player);
 
-                case "off":
-                    plugin.getPlayerDataManager().setVeinMinerEnabled(player, false);
-                    player.sendMessage(plugin.getMessageManager().getMessage("messages.toggle.disabled", "VeinMiner has been disabled."));
-                    return true;
-
-                case "toggle":
-                    boolean newState = !plugin.getPlayerDataManager().isVeinMinerEnabled(player);
-                    plugin.getPlayerDataManager().setVeinMinerEnabled(player, newState);
-
-                    if (newState) {
-                        player.sendMessage(plugin.getMessageManager().getMessage("messages.toggle.enabled", "VeinMiner has been enabled."));
-                    } else {
-                        player.sendMessage(plugin.getMessageManager().getMessage("messages.toggle.disabled", "VeinMiner has been disabled."));
-                    }
-                    return true;
-
-                case "tool":
-                    if (args.length < 2) {
-                        player.sendMessage(plugin.getMessageManager().getMessage("messages.command.usage-tool", "Usage: /veinminer tool <pickaxe|axe|shovel|hoe>"));
-                        return true;
-                    }
-
-                    String toolType = args[1].toLowerCase();
-                    if (!isValidToolType(toolType)) {
-                        player.sendMessage(plugin.getMessageManager().getMessage("messages.command.invalid-tool-type", "Invalid tool type. Valid types: pickaxe, axe, shovel, hoe"));
-                        return true;
-                    }
-
-                    boolean toolEnabled = !plugin.getPlayerDataManager().isToolEnabled(player, toolType);
-                    plugin.getPlayerDataManager().setToolEnabled(player, toolType, toolEnabled);
-
-                    Map<String, String> placeholders = new HashMap<>();
-                    placeholders.put("%tool%", toolType);
-
-                    if (toolEnabled) {
-                        player.sendMessage(plugin.getMessageManager().formatMessage("messages.toggle.tool-enabled", "%tool%", toolType));
-                    } else {
-                        player.sendMessage(plugin.getMessageManager().formatMessage("messages.toggle.tool-disabled", "%tool%", toolType));
-                    }
-                    return true;
-
-                default:
-                    player.sendMessage(plugin.getMessageManager().getMessage("messages.command.unknown-subcommand", "Unknown subcommand. Use /veinminer help for a list of commands."));
-                    return true;
-            }
+        // Send a message to the player indicating the new state
+        if (!enabled) {
+            player.sendMessage(plugin.getMessageManager().formatMessage("messages.toggle.enabled"));
+        } else {
+            player.sendMessage(plugin.getMessageManager().formatMessage("messages.toggle.disabled"));
         }
 
-        return false;
+        return true;
     }
 
-    private boolean isValidToolType(String toolType) {
-        return toolType.equals("pickaxe") ||
-                toolType.equals("axe") ||
-                toolType.equals("shovel") ||
-                toolType.equals("hoe");
+    /**
+     * Check if a player has a permission
+     * @param player The player to check
+     * @param permission The permission to check
+     * @return True if the player has permission, false otherwise
+     */
+    private boolean hasPermission(Player player, String permission) {
+        if (player.hasPermission("veinminer.admin")) {
+            return true;
+        }
+
+        return player.hasPermission(permission);
     }
 }

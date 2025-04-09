@@ -2,8 +2,6 @@ package org.bischofftv.veinminer.gui;
 
 import org.bischofftv.veinminer.Veinminer;
 import org.bischofftv.veinminer.data.PlayerData;
-import org.bischofftv.veinminer.skills.SkillManager;
-import org.bischofftv.veinminer.utils.MessageManager;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
@@ -18,11 +16,9 @@ import java.util.List;
 public class SkillGUI {
 
     private final Veinminer plugin;
-    private final MessageManager messageManager;
 
     public SkillGUI(Veinminer plugin) {
         this.plugin = plugin;
-        this.messageManager = plugin.getMessageManager();
     }
 
     /**
@@ -30,90 +26,119 @@ public class SkillGUI {
      * @param player The player
      */
     public void openSkillGUI(Player player) {
+        // Check if skill system is enabled
         if (!plugin.getSkillManager().isEnabled()) {
-            player.sendMessage(messageManager.formatMessage("messages.skills.disabled"));
+            player.sendMessage(plugin.getMessageManager().formatMessage("messages.skills.disabled"));
             return;
         }
 
-        Inventory inventory = Bukkit.createInventory(null, 27, ChatColor.DARK_PURPLE + "VeinMiner Skills");
+        // Create inventory
+        Inventory inventory = Bukkit.createInventory(null, 36, ChatColor.GOLD + "VeinMiner Skills");
 
         // Get player data
         PlayerData playerData = plugin.getPlayerDataManager().getPlayerData(player.getUniqueId());
         if (playerData == null) {
-            player.sendMessage(messageManager.formatMessage("messages.error.player-data-not-found"));
+            plugin.getLogger().warning("Failed to load player data for " + player.getName());
+            player.sendMessage(ChatColor.RED + "Failed to load your player data. Please try again later.");
             return;
         }
 
-        // Get skill levels
+        // Skill points display
+        int skillPoints = playerData.getSkillPoints();
+        ItemStack skillPointsItem = createItem(Material.EXPERIENCE_BOTTLE,
+                ChatColor.GOLD + "Skill Points: " + skillPoints,
+                ChatColor.GRAY + "You have " + skillPoints + " skill points to spend");
+        inventory.setItem(4, skillPointsItem);
+
+        // Efficiency Boost skill
         int efficiencyLevel = playerData.getEfficiencyLevel();
-        int luckLevel = playerData.getLuckLevel();
-        int energyLevel = playerData.getEnergyLevel();
+        double efficiencyBoost = plugin.getSkillManager().getEfficiencyBoost(efficiencyLevel);
+        List<String> efficiencyLore = new ArrayList<>();
+        efficiencyLore.add(ChatColor.GRAY + "Current Level: " + ChatColor.GOLD + efficiencyLevel + "/" + plugin.getSkillManager().getMaxSkillLevel());
+        efficiencyLore.add(ChatColor.GRAY + "Effect: " + ChatColor.GOLD + efficiencyBoost + "% chance to reduce durability consumption");
 
-        // Get available skill points
-        int availablePoints = plugin.getSkillManager().getAvailableSkillPoints(player);
-
-        // Row 1: Available skill points
-        ItemStack pointsItem = createItem(Material.EXPERIENCE_BOTTLE,
-                ChatColor.GOLD + "Available Skill Points: " + ChatColor.GREEN + availablePoints,
-                ChatColor.GRAY + "You can spend these points to upgrade your skills.");
-        inventory.setItem(4, pointsItem);
-
-        // Row 2: Skills
-        // Efficiency Boost
-        ItemStack efficiencyItem = createSkillItem(
-                Material.DIAMOND_PICKAXE,
-                "Efficiency Boost",
-                efficiencyLevel,
-                plugin.getSkillManager().getMaxSkillLevel(),
-                plugin.getSkillManager().getSkillEffectValue(player, SkillManager.SkillType.EFFICIENCY),
-                "Chance to reduce durability consumption",
-                availablePoints > 0 && efficiencyLevel < plugin.getSkillManager().getMaxSkillLevel()
-        );
-        inventory.setItem(11, efficiencyItem);
-
-        // Luck Enhancement
-        ItemStack luckItem = createSkillItem(
-                Material.GOLD_INGOT,
-                "Luck Enhancement",
-                luckLevel,
-                plugin.getSkillManager().getMaxSkillLevel(),
-                plugin.getSkillManager().getSkillEffectValue(player, SkillManager.SkillType.LUCK),
-                "Chance to get additional drops",
-                availablePoints > 0 && luckLevel < plugin.getSkillManager().getMaxSkillLevel()
-        );
-        inventory.setItem(13, luckItem);
-
-        // Energy Conservation
-        ItemStack energyItem = createSkillItem(
-                Material.COOKED_BEEF,
-                "Energy Conservation",
-                energyLevel,
-                plugin.getSkillManager().getMaxSkillLevel(),
-                plugin.getSkillManager().getSkillEffectValue(player, SkillManager.SkillType.ENERGY),
-                "Chance to reduce hunger consumption",
-                availablePoints > 0 && energyLevel < plugin.getSkillManager().getMaxSkillLevel()
-        );
-        inventory.setItem(15, energyItem);
-
-        // Row 3: Reset button and back button
-        // Reset button
-        List<String> resetLore = new ArrayList<>();
-        resetLore.add(ChatColor.GRAY + "Click to reset all your skill points.");
-
-        if (plugin.getSkillManager().isResetCostEnabled() && plugin.getSkillManager().getResetCost() > 0) {
-            resetLore.add(ChatColor.GRAY + "Cost: " + ChatColor.GOLD + plugin.getSkillManager().getResetCost());
+        if (efficiencyLevel < plugin.getSkillManager().getMaxSkillLevel() && skillPoints > 0) {
+            double nextBoost = plugin.getSkillManager().getEfficiencyBoost(efficiencyLevel + 1);
+            efficiencyLore.add(ChatColor.GRAY + "Next Level: " + ChatColor.GOLD + nextBoost + "% chance");
+            efficiencyLore.add(ChatColor.GREEN + "Click to upgrade (1 skill point)");
+        } else if (efficiencyLevel >= plugin.getSkillManager().getMaxSkillLevel()) {
+            efficiencyLore.add(ChatColor.GOLD + "Maximum level reached");
+        } else {
+            efficiencyLore.add(ChatColor.RED + "Not enough skill points");
         }
 
-        ItemStack resetItem = createItem(Material.BARRIER, ChatColor.RED + "Reset Skills", resetLore);
-        inventory.setItem(21, resetItem);
+        ItemStack efficiencyItem = createItem(Material.DIAMOND_PICKAXE,
+                ChatColor.AQUA + "Efficiency Boost",
+                efficiencyLore);
+        inventory.setItem(11, efficiencyItem);
+
+        // Luck Enhancement skill
+        int luckLevel = playerData.getLuckLevel();
+        double luckBoost = plugin.getSkillManager().getLuckEnhancement(luckLevel);
+        List<String> luckLore = new ArrayList<>();
+        luckLore.add(ChatColor.GRAY + "Current Level: " + ChatColor.GOLD + luckLevel + "/" + plugin.getSkillManager().getMaxSkillLevel());
+        luckLore.add(ChatColor.GRAY + "Effect: " + ChatColor.GOLD + luckBoost + "% chance to get additional drops");
+
+        if (luckLevel < plugin.getSkillManager().getMaxSkillLevel() && skillPoints > 0) {
+            double nextBoost = plugin.getSkillManager().getLuckEnhancement(luckLevel + 1);
+            luckLore.add(ChatColor.GRAY + "Next Level: " + ChatColor.GOLD + nextBoost + "% chance");
+            luckLore.add(ChatColor.GREEN + "Click to upgrade (1 skill point)");
+        } else if (luckLevel >= plugin.getSkillManager().getMaxSkillLevel()) {
+            luckLore.add(ChatColor.GOLD + "Maximum level reached");
+        } else {
+            luckLore.add(ChatColor.RED + "Not enough skill points");
+        }
+
+        ItemStack luckItem = createItem(Material.GOLD_INGOT,
+                ChatColor.YELLOW + "Luck Enhancement",
+                luckLore);
+        inventory.setItem(13, luckItem);
+
+        // Energy Conservation skill
+        int energyLevel = playerData.getEnergyLevel();
+        double energyBoost = plugin.getSkillManager().getEnergyConservation(energyLevel);
+        List<String> energyLore = new ArrayList<>();
+        energyLore.add(ChatColor.GRAY + "Current Level: " + ChatColor.GOLD + energyLevel + "/" + plugin.getSkillManager().getMaxSkillLevel());
+        energyLore.add(ChatColor.GRAY + "Effect: " + ChatColor.GOLD + energyBoost + "% chance to reduce hunger consumption");
+
+        if (energyLevel < plugin.getSkillManager().getMaxSkillLevel() && skillPoints > 0) {
+            double nextBoost = plugin.getSkillManager().getEnergyConservation(energyLevel + 1);
+            energyLore.add(ChatColor.GRAY + "Next Level: " + ChatColor.GOLD + nextBoost + "% chance");
+            energyLore.add(ChatColor.GREEN + "Click to upgrade (1 skill point)");
+        } else if (energyLevel >= plugin.getSkillManager().getMaxSkillLevel()) {
+            energyLore.add(ChatColor.GOLD + "Maximum level reached");
+        } else {
+            energyLore.add(ChatColor.RED + "Not enough skill points");
+        }
+
+        ItemStack energyItem = createItem(Material.COOKED_BEEF,
+                ChatColor.RED + "Energy Conservation",
+                energyLore);
+        inventory.setItem(15, energyItem);
+
+        // Reset skills button
+        List<String> resetLore = new ArrayList<>();
+        resetLore.add(ChatColor.GRAY + "Reset all your skills and");
+        resetLore.add(ChatColor.GRAY + "get your skill points back");
+
+        if (plugin.getConfig().getBoolean("reset.cost-enabled", true)) {
+            double cost = plugin.getConfig().getDouble("reset.cost", 1000.0);
+            resetLore.add(ChatColor.GRAY + "Cost: " + ChatColor.GOLD + cost);
+        }
+
+        ItemStack resetItem = createItem(Material.BARRIER,
+                ChatColor.DARK_RED + "Reset Skills",
+                resetLore);
+        inventory.setItem(31, resetItem);
 
         // Back button
-        ItemStack backItem = createItem(Material.OAK_DOOR, ChatColor.GREEN + "Back to Main Menu",
-                ChatColor.GRAY + "Click to return to the main menu.");
-        inventory.setItem(23, backItem);
+        ItemStack backButton = createItem(Material.OAK_DOOR,
+                ChatColor.GREEN + "Back to Main Menu",
+                ChatColor.GRAY + "Return to the main menu");
+        inventory.setItem(27, backButton);
 
         // Fill empty slots with glass panes
-        ItemStack filler = createItem(Material.BLACK_STAINED_GLASS_PANE, " ", new ArrayList<>());
+        ItemStack filler = createItem(Material.GRAY_STAINED_GLASS_PANE, " ", new ArrayList<>());
         for (int i = 0; i < inventory.getSize(); i++) {
             if (inventory.getItem(i) == null) {
                 inventory.setItem(i, filler);
@@ -124,7 +149,20 @@ public class SkillGUI {
     }
 
     /**
-     * Create an item for the GUI
+     * Create an item with a name and lore
+     * @param material The material
+     * @param name The name
+     * @param lore The lore
+     * @return The item
+     */
+    private ItemStack createItem(Material material, String name, String lore) {
+        List<String> loreList = new ArrayList<>();
+        loreList.add(lore);
+        return createItem(material, name, loreList);
+    }
+
+    /**
+     * Create an item with a name and lore
      * @param material The material
      * @param name The name
      * @param lore The lore
@@ -136,58 +174,6 @@ public class SkillGUI {
         meta.setDisplayName(name);
         meta.setLore(lore);
         item.setItemMeta(meta);
-        return item;
-    }
-
-    /**
-     * Create an item for the GUI
-     * @param material The material
-     * @param name The name
-     * @param loreString A single lore string
-     * @return The item
-     */
-    private ItemStack createItem(Material material, String name, String loreString) {
-        List<String> lore = new ArrayList<>();
-        lore.add(loreString);
-        return createItem(material, name, lore);
-    }
-
-    /**
-     * Create a skill item for the GUI
-     * @param material The material
-     * @param skillName The skill name
-     * @param level The current level
-     * @param maxLevel The maximum level
-     * @param effectValue The effect value
-     * @param description The skill description
-     * @param canUpgrade Whether the skill can be upgraded
-     * @return The item
-     */
-    private ItemStack createSkillItem(Material material, String skillName, int level, int maxLevel,
-                                      double effectValue, String description, boolean canUpgrade) {
-        ItemStack item = new ItemStack(material);
-        ItemMeta meta = item.getItemMeta();
-
-        meta.setDisplayName(ChatColor.AQUA + skillName);
-
-        List<String> lore = new ArrayList<>();
-        lore.add(ChatColor.GRAY + description);
-        lore.add("");
-        lore.add(ChatColor.YELLOW + "Level: " + ChatColor.GREEN + level + ChatColor.GRAY + "/" + ChatColor.GREEN + maxLevel);
-        lore.add(ChatColor.YELLOW + "Effect: " + ChatColor.GREEN + effectValue + "%");
-        lore.add("");
-
-        if (canUpgrade) {
-            lore.add(ChatColor.GREEN + "Click to upgrade!");
-        } else if (level >= maxLevel) {
-            lore.add(ChatColor.RED + "Maximum level reached!");
-        } else {
-            lore.add(ChatColor.RED + "Not enough skill points!");
-        }
-
-        meta.setLore(lore);
-        item.setItemMeta(meta);
-
         return item;
     }
 }

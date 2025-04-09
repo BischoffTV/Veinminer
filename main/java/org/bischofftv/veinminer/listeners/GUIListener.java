@@ -42,8 +42,16 @@ public class GUIListener implements Listener {
 
             // Toggle VeinMiner
             if (event.getSlot() == 10) {
+                if (!hasPermission(player, "veinminer.command.toggle")) {
+                    player.sendMessage(plugin.getMessageManager().formatMessage("messages.command.no-permission"));
+                    return;
+                }
+
                 boolean enabled = plugin.getPlayerDataManager().isVeinMinerEnabled(player);
                 plugin.getPlayerDataManager().setVeinMinerEnabled(player, !enabled);
+
+                // Speichere die Einstellungen sofort
+                plugin.getPlayerDataManager().savePlayerSettings(player);
 
                 // Send message from lang.yml
                 if (enabled) {
@@ -58,12 +66,22 @@ public class GUIListener implements Listener {
 
             // Tools Settings
             else if (event.getSlot() == 12) {
+                if (!hasPermission(player, "veinminer.command.tool")) {
+                    player.sendMessage(plugin.getMessageManager().formatMessage("messages.command.no-permission"));
+                    return;
+                }
+
                 player.closeInventory();
                 openToolsGUI(player);
             }
 
             // Level Information - only if level system is enabled
             else if (event.getSlot() == 14 && plugin.getLevelManager().isEnabled()) {
+                if (!hasPermission(player, "veinminer.command.level")) {
+                    player.sendMessage(plugin.getMessageManager().formatMessage("messages.command.no-permission"));
+                    return;
+                }
+
                 player.closeInventory();
 
                 // Get player level data
@@ -82,30 +100,55 @@ public class GUIListener implements Listener {
 
             // Skills - only if skill system is enabled
             else if (event.getSlot() == 16 && plugin.getSkillManager().isEnabled()) {
+                if (!hasPermission(player, "veinminer.command.skills")) {
+                    player.sendMessage(plugin.getMessageManager().formatMessage("messages.command.no-permission"));
+                    return;
+                }
+
                 player.closeInventory();
                 plugin.getSkillGUI().openSkillGUI(player);
             }
 
             // Achievements - only if achievement system is enabled
             else if (event.getSlot() == 19 && plugin.getAchievementManager().isEnabled()) {
+                if (!hasPermission(player, "veinminer.command.achievements")) {
+                    player.sendMessage(plugin.getMessageManager().formatMessage("messages.command.no-permission"));
+                    return;
+                }
+
                 player.closeInventory();
                 plugin.getAchievementGUI().openAchievementGUI(player);
             }
 
             // Top Players - only if enabled in config
             else if (event.getSlot() == 21 && plugin.getConfig().getBoolean("gui.show-top-players", true)) {
+                if (!hasPermission(player, "veinminer.command.topplayers")) {
+                    player.sendMessage(plugin.getMessageManager().formatMessage("messages.command.no-permission"));
+                    return;
+                }
+
                 player.closeInventory();
                 plugin.getTopPlayersGUI().openTopPlayersGUI(player);
             }
 
             // About
             else if (event.getSlot() == 23) {
+                if (!hasPermission(player, "veinminer.command.about")) {
+                    player.sendMessage(plugin.getMessageManager().formatMessage("messages.command.no-permission"));
+                    return;
+                }
+
                 player.closeInventory();
                 player.performCommand("veinminerabout");
             }
 
             // Help
             else if (event.getSlot() == 25) {
+                if (!hasPermission(player, "veinminer.command.help")) {
+                    player.sendMessage(plugin.getMessageManager().formatMessage("messages.command.no-permission"));
+                    return;
+                }
+
                 player.closeInventory();
                 player.performCommand("veinminerhelp");
             }
@@ -137,21 +180,45 @@ public class GUIListener implements Listener {
             return;
         }
 
-        // Pickaxe
-        boolean pickaxeEnabled = playerData.isToolEnabled("pickaxe");
-        inventory.setItem(10, createToolItem(Material.DIAMOND_PICKAXE, "Pickaxe", pickaxeEnabled));
+        // Pickaxe - only show if player has permission
+        if (hasPermission(player, "veinminer.tool.pickaxe")) {
+            boolean pickaxeEnabled = playerData.isToolEnabled("pickaxe");
+            inventory.setItem(10, createToolItem(Material.DIAMOND_PICKAXE, "Pickaxe", pickaxeEnabled));
+        } else {
+            inventory.setItem(10, createItem(Material.BARRIER,
+                    ChatColor.RED + "Pickaxe: No Permission",
+                    ChatColor.GRAY + "You don't have permission to use this tool"));
+        }
 
-        // Axe
-        boolean axeEnabled = playerData.isToolEnabled("axe");
-        inventory.setItem(12, createToolItem(Material.DIAMOND_AXE, "Axe", axeEnabled));
+        // Axe - only show if player has permission
+        if (hasPermission(player, "veinminer.tool.axe")) {
+            boolean axeEnabled = playerData.isToolEnabled("axe");
+            inventory.setItem(12, createToolItem(Material.DIAMOND_AXE, "Axe", axeEnabled));
+        } else {
+            inventory.setItem(12, createItem(Material.BARRIER,
+                    ChatColor.RED + "Axe: No Permission",
+                    ChatColor.GRAY + "You don't have permission to use this tool"));
+        }
 
-        // Shovel
-        boolean shovelEnabled = playerData.isToolEnabled("shovel");
-        inventory.setItem(14, createToolItem(Material.DIAMOND_SHOVEL, "Shovel", shovelEnabled));
+        // Shovel - only show if player has permission
+        if (hasPermission(player, "veinminer.tool.shovel")) {
+            boolean shovelEnabled = playerData.isToolEnabled("shovel");
+            inventory.setItem(14, createToolItem(Material.DIAMOND_SHOVEL, "Shovel", shovelEnabled));
+        } else {
+            inventory.setItem(14, createItem(Material.BARRIER,
+                    ChatColor.RED + "Shovel: No Permission",
+                    ChatColor.GRAY + "You don't have permission to use this tool"));
+        }
 
-        // Hoe
-        boolean hoeEnabled = playerData.isToolEnabled("hoe");
-        inventory.setItem(16, createToolItem(Material.DIAMOND_HOE, "Hoe", hoeEnabled));
+        // Hoe - only show if player has permission
+        if (hasPermission(player, "veinminer.tool.hoe")) {
+            boolean hoeEnabled = playerData.isToolEnabled("hoe");
+            inventory.setItem(16, createToolItem(Material.DIAMOND_HOE, "Hoe", hoeEnabled));
+        } else {
+            inventory.setItem(16, createItem(Material.BARRIER,
+                    ChatColor.RED + "Hoe: No Permission",
+                    ChatColor.GRAY + "You don't have permission to use this tool"));
+        }
 
         // Back button
         inventory.setItem(22, createItem(Material.OAK_DOOR, ChatColor.GREEN + "Back to Main Menu",
@@ -216,8 +283,17 @@ public class GUIListener implements Listener {
         }
 
         if (toolType != null) {
+            // Check if the player has permission for this tool
+            if (!hasPermission(player, "veinminer.tool." + toolType)) {
+                player.sendMessage(plugin.getMessageManager().formatMessage("messages.permission.tool-not-allowed", "%tool%", toolType));
+                return;
+            }
+
             boolean enabled = plugin.getPlayerDataManager().isToolEnabled(player, toolType);
             plugin.getPlayerDataManager().setToolEnabled(player, toolType, !enabled);
+
+            // Speichere die Einstellungen sofort
+            plugin.getPlayerDataManager().savePlayerSettings(player);
 
             // Send message
             if (enabled) {
@@ -230,6 +306,20 @@ public class GUIListener implements Listener {
             player.closeInventory();
             openToolsGUI(player);
         }
+    }
+
+    /**
+     * Check if a player has a permission
+     * @param player The player to check
+     * @param permission The permission to check
+     * @return True if the player has permission, false otherwise
+     */
+    private boolean hasPermission(Player player, String permission) {
+        if (player.hasPermission("veinminer.admin")) {
+            return true;
+        }
+
+        return player.hasPermission(permission);
     }
 
     /**

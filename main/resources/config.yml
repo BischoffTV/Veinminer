@@ -106,6 +106,8 @@ permissions:
 require-permission: true
 # The permission node required to use VeinMiner
 use-permission: "veinminer.use"
+# Whether to require specific permissions for each tool
+require-tool-permission: true
 
 # Level system settings
 level-system:

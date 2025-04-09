@@ -38,6 +38,12 @@ public class MainGUI {
             return;
         }
 
+        // Add debug logging
+        plugin.getLogger().info("GUI data for " + player.getName() +
+                ": Level=" + playerData.getLevel() +
+                ", XP=" + playerData.getExperience() +
+                ", Blocks=" + playerData.getBlocksMined());
+
         boolean veinMinerEnabled = playerData.isVeinMinerEnabled();
 
         // Toggle VeinMiner item (green or red wool based on status)
@@ -95,7 +101,7 @@ public class MainGUI {
                     ChatColor.GRAY + plugin.getMessageManager().getMessage("gui.achievements-lore", "View your achievements")));
         }
 
-        // Top Players - add to slot 20 to maintain the pattern
+        // Top Players - add to slot 21 as specified by the user
         if (plugin.getConfig().getBoolean("gui.show-top-players", true)) {
             inventory.setItem(21, createItem(Material.PLAYER_HEAD,
                     ChatColor.AQUA + plugin.getMessageManager().getMessage("gui.top-players-title", "Top Players"),

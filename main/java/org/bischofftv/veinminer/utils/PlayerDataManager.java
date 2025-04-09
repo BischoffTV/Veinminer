@@ -27,30 +27,66 @@ public class PlayerDataManager {
      * @param player The player
      */
     public void loadPlayerData(Player player) {
-        UUID playerUUID = player.getUniqueId();
+        UUID uuid = player.getUniqueId();
+        String playerName = player.getName();
 
         // Check if player data is already loaded
-        if (playerDataMap.containsKey(playerUUID)) {
+        if (playerDataMap.containsKey(uuid)) {
+            plugin.getLogger().info("[DEBUG] Player data for " + playerName + " is already loaded in memory.");
+            PlayerData existingData = playerDataMap.get(uuid);
+            plugin.getLogger().info("[DEBUG] Memory data: Level=" + existingData.getLevel() +
+                    ", XP=" + existingData.getExperience() +
+                    ", Blocks=" + existingData.getBlocksMined());
             return;
         }
 
         // Create new player data
-        PlayerData playerData = new PlayerData(playerUUID);
+        PlayerData playerData = new PlayerData(uuid, playerName);
+        // Standardmäßig ist VeinMiner deaktiviert für neue Spieler
+        playerData.setVeinMinerEnabled(false);
+        // Standardmäßig sind alle Tools deaktiviert
+        playerData.setToolEnabled("pickaxe", false);
+        playerData.setToolEnabled("axe", false);
+        playerData.setToolEnabled("shovel", false);
+        playerData.setToolEnabled("hoe", false);
 
         // Try to load from database
-        try {
-            Connection connection = plugin.getDatabaseManager().getConnection();
-            if (connection != null) {
-                String sql = "SELECT * FROM " + plugin.getDatabaseManager().getTablePrefix() + "player_data WHERE uuid = ?";
-                PreparedStatement statement = connection.prepareStatement(sql);
-                statement.setString(1, playerUUID.toString());
-                ResultSet resultSet = statement.executeQuery();
+        if (plugin.getDatabaseManager() != null && plugin.getDatabaseManager().isConnectionValid()) {
+            Connection connection = null;
+            PreparedStatement statement = null;
+            ResultSet resultSet = null;
 
+            try {
+                // Setze ein Timeout für das Abrufen der Verbindung
+                long startTime = System.currentTimeMillis();
+                connection = plugin.getDatabaseManager().getConnection();
+                long endTime = System.currentTimeMillis();
+
+                if (endTime - startTime > 1000) {
+                    plugin.getLogger().warning("[DEBUG] Slow connection acquisition for " + playerName + ": " + (endTime - startTime) + "ms");
+                }
+
+                if (connection == null) {
+                    plugin.getLogger().warning("[DEBUG] Failed to get database connection when loading player data for " + playerName);
+                    playerDataMap.put(uuid, playerData);
+                    return;
+                }
+
+                String sql = "SELECT * FROM " + plugin.getDatabaseManager().getTablePrefix() + "player_data WHERE uuid = ?";
+                statement = connection.prepareStatement(sql);
+                statement.setString(1, uuid.toString());
+
+                plugin.getLogger().info("[DEBUG] Executing SQL query to load player data for " + playerName);
+                resultSet = statement.executeQuery();
                 if (resultSet.next()) {
-                    playerData.setVeinMinerEnabled(resultSet.getBoolean("enabled"));
+                    playerData.setVeinMinerEnabled(resultSet.getBoolean("veinminer_enabled"));
                     playerData.setLevel(resultSet.getInt("level"));
                     playerData.setExperience(resultSet.getInt("experience"));
-                    playerData.setBlocksMined(resultSet.getInt("blocks_mined"));
+                    playerData.setBlocksMined(resultSet.getLong("blocks_mined"));
+                    playerData.setSkillPoints(resultSet.getInt("skill_points"));
+                    playerData.setEfficiencyLevel(resultSet.getInt("efficiency_level"));
+                    playerData.setLuckLevel(resultSet.getInt("luck_level"));
+                    playerData.setEnergyLevel(resultSet.getInt("energy_level"));
 
                     // Load tool settings
                     playerData.setToolEnabled("pickaxe", resultSet.getBoolean("pickaxe_enabled"));
@@ -58,158 +94,178 @@ public class PlayerDataManager {
                     playerData.setToolEnabled("shovel", resultSet.getBoolean("shovel_enabled"));
                     playerData.setToolEnabled("hoe", resultSet.getBoolean("hoe_enabled"));
 
-                    // Load skill levels
-                    playerData.setEfficiencyLevel(resultSet.getInt("efficiency_level"));
-                    playerData.setLuckLevel(resultSet.getInt("luck_level"));
-                    playerData.setEnergyLevel(resultSet.getInt("energy_level"));
-
-                    plugin.getLogger().info("Loaded player data for " + player.getName() +
+                    // Add debug logging
+                    plugin.getLogger().info("[DEBUG] Loaded player data from database for " + playerName +
                             ": Level=" + playerData.getLevel() +
                             ", XP=" + playerData.getExperience() +
-                            ", Blocks Mined=" + playerData.getBlocksMined());
+                            ", Blocks=" + playerData.getBlocksMined());
                 } else {
-                    // Player not found in database, create a new entry
-                    sql = "INSERT INTO " + plugin.getDatabaseManager().getTablePrefix() +
-                            "player_data (uuid, player_name, enabled, level, experience, blocks_mined, " +
-                            "pickaxe_enabled, axe_enabled, shovel_enabled, hoe_enabled, " +
-                            "efficiency_level, luck_level, energy_level) " +
-                            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                    plugin.getLogger().info("[DEBUG] No existing data found in database for " + playerName + ", creating new entry");
 
-                    PreparedStatement insertStatement = connection.prepareStatement(sql);
-                    insertStatement.setString(1, playerUUID.toString());
-                    insertStatement.setString(2, player.getName());
-                    insertStatement.setBoolean(3, playerData.isVeinMinerEnabled());
-                    insertStatement.setInt(4, playerData.getLevel());
-                    insertStatement.setInt(5, playerData.getExperience());
-                    insertStatement.setInt(6, playerData.getBlocksMined());
-                    insertStatement.setBoolean(7, playerData.isToolEnabled("pickaxe"));
-                    insertStatement.setBoolean(8, playerData.isToolEnabled("axe"));
-                    insertStatement.setBoolean(9, playerData.isToolEnabled("shovel"));
-                    insertStatement.setBoolean(10, playerData.isToolEnabled("hoe"));
-                    insertStatement.setInt(11, playerData.getEfficiencyLevel());
-                    insertStatement.setInt(12, playerData.getLuckLevel());
-                    insertStatement.setInt(13, playerData.getEnergyLevel());
+                    // Insert new player data
+                    PreparedStatement insertStatement = null;
+                    try {
+                        sql = "INSERT INTO " + plugin.getDatabaseManager().getTablePrefix() +
+                                "player_data (uuid, player_name, veinminer_enabled, level, experience, blocks_mined, " +
+                                "skill_points, efficiency_level, luck_level, energy_level, " +
+                                "pickaxe_enabled, axe_enabled, shovel_enabled, hoe_enabled) " +
+                                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
-                    insertStatement.executeUpdate();
-                    insertStatement.close();
+                        insertStatement = connection.prepareStatement(sql);
+                        insertStatement.setString(1, uuid.toString());
+                        insertStatement.setString(2, playerName);
+                        insertStatement.setBoolean(3, playerData.isVeinMinerEnabled());
+                        insertStatement.setInt(4, playerData.getLevel());
+                        insertStatement.setInt(5, playerData.getExperience());
+                        insertStatement.setLong(6, playerData.getBlocksMined());
+                        insertStatement.setInt(7, playerData.getSkillPoints());
+                        insertStatement.setInt(8, playerData.getEfficiencyLevel());
+                        insertStatement.setInt(9, playerData.getLuckLevel());
+                        insertStatement.setInt(10, playerData.getEnergyLevel());
+                        insertStatement.setBoolean(11, playerData.isToolEnabled("pickaxe"));
+                        insertStatement.setBoolean(12, playerData.isToolEnabled("axe"));
+                        insertStatement.setBoolean(13, playerData.isToolEnabled("shovel"));
+                        insertStatement.setBoolean(14, playerData.isToolEnabled("hoe"));
 
-                    plugin.getLogger().info("Created new player data for " + player.getName());
+                        insertStatement.executeUpdate();
+                        plugin.getLogger().info("[DEBUG] Created new player data in database for " + playerName);
+                    } finally {
+                        if (insertStatement != null) {
+                            try {
+                                insertStatement.close();
+                            } catch (SQLException e) {
+                                plugin.getLogger().warning("Failed to close insert statement: " + e.getMessage());
+                            }
+                        }
+                    }
                 }
-
-                resultSet.close();
-                statement.close();
-            }
-        } catch (SQLException e) {
-            plugin.getLogger().warning("Failed to load player data for " + player.getName() + ": " + e.getMessage());
-            if (plugin.isDebugMode()) {
+            } catch (SQLException e) {
+                plugin.getLogger().warning("Failed to load player data for " + playerName + ": " + e.getMessage());
                 e.printStackTrace();
+            } finally {
+                // Verwende die closeResources-Methode des DatabaseManagers
+                plugin.getDatabaseManager().closeResources(resultSet, statement, connection);
             }
+        } else {
+            plugin.getLogger().warning("[DEBUG] Database connection not available when loading player data for " + playerName);
         }
 
-        // Store player data
-        playerDataMap.put(playerUUID, playerData);
+        // Add to map
+        playerDataMap.put(uuid, playerData);
+        plugin.getLogger().info("[DEBUG] Added player data to memory map for " + playerName);
     }
 
     /**
      * Save player data to the database
-     * @param player The player
+     * @param uuid The player UUID
      */
-    public void savePlayerData(Player player) {
-        UUID playerUUID = player.getUniqueId();
-
-        // Check if player data is loaded
-        if (!playerDataMap.containsKey(playerUUID)) {
+    public void savePlayerData(UUID uuid) {
+        PlayerData playerData = playerDataMap.get(uuid);
+        if (playerData == null) {
+            plugin.getLogger().warning("[DEBUG] Cannot save player data: No data found in memory for UUID " + uuid);
             return;
         }
 
-        PlayerData playerData = playerDataMap.get(playerUUID);
+        plugin.getLogger().info("[DEBUG] Saving player data for " + playerData.getPlayerName() +
+                ": Level=" + playerData.getLevel() +
+                ", XP=" + playerData.getExperience() +
+                ", Blocks=" + playerData.getBlocksMined());
 
-        // Try to save to database
-        try {
-            Connection connection = plugin.getDatabaseManager().getConnection();
-            if (connection != null) {
-                String sql = "INSERT INTO " + plugin.getDatabaseManager().getTablePrefix() + "player_data " +
-                        "(uuid, player_name, enabled, level, experience, blocks_mined, " +
-                        "pickaxe_enabled, axe_enabled, shovel_enabled, hoe_enabled, " +
-                        "efficiency_level, luck_level, energy_level) " +
-                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) " +
-                        "ON DUPLICATE KEY UPDATE " +
-                        "player_name = ?, enabled = ?, level = ?, experience = ?, blocks_mined = ?, " +
-                        "pickaxe_enabled = ?, axe_enabled = ?, shovel_enabled = ?, hoe_enabled = ?, " +
-                        "efficiency_level = ?, luck_level = ?, energy_level = ?";
+        if (plugin.getDatabaseManager() != null && plugin.getDatabaseManager().isConnectionValid()) {
+            Connection connection = null;
+            PreparedStatement statement = null;
 
-                PreparedStatement statement = connection.prepareStatement(sql);
+            try {
+                // Setze ein Timeout für das Abrufen der Verbindung
+                long startTime = System.currentTimeMillis();
+                connection = plugin.getDatabaseManager().getConnection();
+                long endTime = System.currentTimeMillis();
 
-                // Insert values
-                statement.setString(1, playerUUID.toString());
-                statement.setString(2, player.getName());
-                statement.setBoolean(3, playerData.isVeinMinerEnabled());
-                statement.setInt(4, playerData.getLevel());
-                statement.setInt(5, playerData.getExperience());
-                statement.setInt(6, playerData.getBlocksMined());
-                statement.setBoolean(7, playerData.isToolEnabled("pickaxe"));
-                statement.setBoolean(8, playerData.isToolEnabled("axe"));
-                statement.setBoolean(9, playerData.isToolEnabled("shovel"));
-                statement.setBoolean(10, playerData.isToolEnabled("hoe"));
-                statement.setInt(11, playerData.getEfficiencyLevel());
-                statement.setInt(12, playerData.getLuckLevel());
-                statement.setInt(13, playerData.getEnergyLevel());
+                if (endTime - startTime > 1000) {
+                    plugin.getLogger().warning("[DEBUG] Slow connection acquisition for " + playerData.getPlayerName() + ": " + (endTime - startTime) + "ms");
+                }
 
-                // Update values
-                statement.setString(14, player.getName());
-                statement.setBoolean(15, playerData.isVeinMinerEnabled());
-                statement.setInt(16, playerData.getLevel());
-                statement.setInt(17, playerData.getExperience());
-                statement.setInt(18, playerData.getBlocksMined());
-                statement.setBoolean(19, playerData.isToolEnabled("pickaxe"));
-                statement.setBoolean(20, playerData.isToolEnabled("axe"));
-                statement.setBoolean(21, playerData.isToolEnabled("shovel"));
-                statement.setBoolean(22, playerData.isToolEnabled("hoe"));
-                statement.setInt(23, playerData.getEfficiencyLevel());
-                statement.setInt(24, playerData.getLuckLevel());
-                statement.setInt(25, playerData.getEnergyLevel());
+                if (connection == null) {
+                    plugin.getLogger().warning("[DEBUG] Failed to get database connection when saving player data for " + playerData.getPlayerName());
+                    return;
+                }
 
-                statement.executeUpdate();
-                statement.close();
-            }
-        } catch (SQLException e) {
-            plugin.getLogger().warning("Failed to save player data for " + player.getName() + ": " + e.getMessage());
-            if (plugin.isDebugMode()) {
+                String sql = "UPDATE " + plugin.getDatabaseManager().getTablePrefix() + "player_data SET " +
+                        "player_name = ?, veinminer_enabled = ?, level = ?, experience = ?, blocks_mined = ?, " +
+                        "skill_points = ?, efficiency_level = ?, luck_level = ?, energy_level = ?, " +
+                        "pickaxe_enabled = ?, axe_enabled = ?, shovel_enabled = ?, hoe_enabled = ? " +
+                        "WHERE uuid = ?";
+
+                statement = connection.prepareStatement(sql);
+                statement.setString(1, playerData.getPlayerName());
+                statement.setBoolean(2, playerData.isVeinMinerEnabled());
+                statement.setInt(3, playerData.getLevel());
+                statement.setInt(4, playerData.getExperience());
+                statement.setLong(5, playerData.getBlocksMined());
+                statement.setInt(6, playerData.getSkillPoints());
+                statement.setInt(7, playerData.getEfficiencyLevel());
+                statement.setInt(8, playerData.getLuckLevel());
+                statement.setInt(9, playerData.getEnergyLevel());
+                statement.setBoolean(10, playerData.isToolEnabled("pickaxe"));
+                statement.setBoolean(11, playerData.isToolEnabled("axe"));
+                statement.setBoolean(12, playerData.isToolEnabled("shovel"));
+                statement.setBoolean(13, playerData.isToolEnabled("hoe"));
+                statement.setString(14, uuid.toString());
+
+                int rowsUpdated = statement.executeUpdate();
+                plugin.getLogger().info("[DEBUG] Saved player data to database for " + playerData.getPlayerName() +
+                        ", rows updated: " + rowsUpdated);
+            } catch (SQLException e) {
+                plugin.getLogger().warning("Failed to save player data for " + playerData.getPlayerName() + ": " + e.getMessage());
                 e.printStackTrace();
+            } finally {
+                // Verwende die closeResources-Methode des DatabaseManagers
+                plugin.getDatabaseManager().closeResources(null, statement, connection);
             }
+        } else {
+            plugin.getLogger().warning("[DEBUG] Database connection not available when saving player data for " + playerData.getPlayerName());
         }
     }
 
     /**
-     * Unload player data
-     * @param player The player
-     */
-    public void unloadPlayerData(Player player) {
-        playerDataMap.remove(player.getUniqueId());
-    }
-
-    /**
-     * Save all player data
+     * Save all player data to the database
      */
     public void saveAllData() {
-        for (Player player : plugin.getServer().getOnlinePlayers()) {
-            savePlayerData(player);
+        plugin.getLogger().info("[DEBUG] Saving all player data, count: " + playerDataMap.size());
+        for (UUID uuid : playerDataMap.keySet()) {
+            savePlayerData(uuid);
         }
+    }
+
+    /**
+     * Remove player data from memory
+     * @param uuid The player UUID
+     */
+    public void removePlayerData(UUID uuid) {
+        PlayerData playerData = playerDataMap.get(uuid);
+        if (playerData != null) {
+            plugin.getLogger().info("[DEBUG] Removing player data from memory for " + playerData.getPlayerName());
+        }
+        playerDataMap.remove(uuid);
     }
 
     /**
      * Get player data
-     * @param playerUUID The player UUID
-     * @return The player data
+     * @param uuid The player UUID
+     * @return The player data, or null if not found
      */
-    public PlayerData getPlayerData(UUID playerUUID) {
-        return playerDataMap.get(playerUUID);
+    public PlayerData getPlayerData(UUID uuid) {
+        PlayerData playerData = playerDataMap.get(uuid);
+        if (playerData == null) {
+            plugin.getLogger().warning("[DEBUG] Attempted to get player data for UUID " + uuid + " but none was found in memory");
+        }
+        return playerData;
     }
 
     /**
-     * Check if vein miner is enabled for a player
+     * Check if VeinMiner is enabled for a player
      * @param player The player
-     * @return True if vein miner is enabled, false otherwise
+     * @return True if enabled, false otherwise
      */
     public boolean isVeinMinerEnabled(Player player) {
         PlayerData playerData = getPlayerData(player.getUniqueId());
@@ -217,14 +273,15 @@ public class PlayerDataManager {
     }
 
     /**
-     * Set vein miner enabled for a player
+     * Set VeinMiner enabled/disabled for a player
      * @param player The player
-     * @param enabled Whether vein miner is enabled
+     * @param enabled Whether VeinMiner should be enabled
      */
     public void setVeinMinerEnabled(Player player, boolean enabled) {
         PlayerData playerData = getPlayerData(player.getUniqueId());
         if (playerData != null) {
             playerData.setVeinMinerEnabled(enabled);
+            plugin.getLogger().info("[DEBUG] Set VeinMiner enabled=" + enabled + " for " + player.getName());
         }
     }
 
@@ -232,7 +289,7 @@ public class PlayerDataManager {
      * Check if a tool is enabled for a player
      * @param player The player
      * @param toolType The tool type
-     * @return True if the tool is enabled, false otherwise
+     * @return True if enabled, false otherwise
      */
     public boolean isToolEnabled(Player player, String toolType) {
         PlayerData playerData = getPlayerData(player.getUniqueId());
@@ -240,15 +297,103 @@ public class PlayerDataManager {
     }
 
     /**
-     * Set a tool enabled for a player
+     * Set a tool enabled/disabled for a player
      * @param player The player
      * @param toolType The tool type
-     * @param enabled Whether the tool is enabled
+     * @param enabled Whether the tool should be enabled
      */
     public void setToolEnabled(Player player, String toolType, boolean enabled) {
         PlayerData playerData = getPlayerData(player.getUniqueId());
         if (playerData != null) {
             playerData.setToolEnabled(toolType, enabled);
+            plugin.getLogger().info("[DEBUG] Set tool " + toolType + " enabled=" + enabled + " for " + player.getName());
+        }
+    }
+
+    /**
+     * Force reload player data from database
+     * @param player The player
+     */
+    public void forceReloadPlayerData(Player player) {
+        UUID uuid = player.getUniqueId();
+        String playerName = player.getName();
+
+        plugin.getLogger().info("[DEBUG] Force reloading player data for " + playerName);
+
+        // Remove existing data
+        playerDataMap.remove(uuid);
+
+        // Load fresh data
+        loadPlayerData(player);
+
+        plugin.getLogger().info("[DEBUG] Player data force reloaded for " + playerName);
+    }
+
+    /**
+     * Speichert die Einstellungen eines Spielers sofort in die Datenbank
+     * @param player Der Spieler
+     */
+    public void savePlayerSettings(Player player) {
+        UUID uuid = player.getUniqueId();
+        PlayerData playerData = playerDataMap.get(uuid);
+        if (playerData == null) {
+            plugin.getLogger().warning("[DEBUG] Cannot save player settings: No data found in memory for " + player.getName());
+            return;
+        }
+
+        plugin.getLogger().info("[DEBUG] Saving settings for " + playerData.getPlayerName() +
+                ": VeinMiner=" + playerData.isVeinMinerEnabled() +
+                ", Pickaxe=" + playerData.isToolEnabled("pickaxe") +
+                ", Axe=" + playerData.isToolEnabled("axe") +
+                ", Shovel=" + playerData.isToolEnabled("shovel") +
+                ", Hoe=" + playerData.isToolEnabled("hoe"));
+
+        savePlayerData(uuid);
+    }
+
+    /**
+     * Test the database connection and log the result
+     */
+    public void testDatabaseConnection() {
+        plugin.getLogger().info("[DEBUG] Testing database connection...");
+
+        if (plugin.getDatabaseManager() == null) {
+            plugin.getLogger().warning("[DEBUG] Database manager is null!");
+            return;
+        }
+
+        boolean isValid = plugin.getDatabaseManager().isConnectionValid();
+        plugin.getLogger().info("[DEBUG] Database connection is valid: " + isValid);
+
+        if (isValid) {
+            Connection connection = null;
+            try {
+                long startTime = System.currentTimeMillis();
+                connection = plugin.getDatabaseManager().getConnection();
+                long endTime = System.currentTimeMillis();
+
+                plugin.getLogger().info("[DEBUG] Connection acquisition time: " + (endTime - startTime) + "ms");
+
+                if (connection != null) {
+                    plugin.getLogger().info("[DEBUG] Connection obtained successfully.");
+                    plugin.getLogger().info("[DEBUG] Auto-commit: " + connection.getAutoCommit());
+                    plugin.getLogger().info("[DEBUG] Transaction isolation: " + connection.getTransactionIsolation());
+                } else {
+                    plugin.getLogger().warning("[DEBUG] Failed to get connection!");
+                }
+            } catch (Exception e) {
+                plugin.getLogger().severe("[DEBUG] Error testing connection: " + e.getMessage());
+                e.printStackTrace();
+            } finally {
+                if (connection != null && !plugin.getDatabaseManager().isFallbackMode()) {
+                    try {
+                        connection.close();
+                        plugin.getLogger().info("[DEBUG] Connection closed successfully.");
+                    } catch (SQLException e) {
+                        plugin.getLogger().warning("[DEBUG] Failed to close connection: " + e.getMessage());
+                    }
+                }
+            }
         }
     }
 }

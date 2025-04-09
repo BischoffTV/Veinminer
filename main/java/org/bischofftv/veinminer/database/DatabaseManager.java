@@ -1,7 +1,6 @@
 package org.bischofftv.veinminer.database;
 
 import org.bischofftv.veinminer.Veinminer;
-import org.bukkit.entity.Player;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -9,411 +8,413 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.UUID;
-import java.util.Set;
+import java.util.Properties;
+import java.util.concurrent.TimeUnit;
+
+import com.zaxxer.hikari.HikariConfig;
+import com.zaxxer.hikari.HikariDataSource;
+import org.bukkit.Bukkit;
 
 public class DatabaseManager {
 
     private final Veinminer plugin;
-    private Connection connection;
-    private boolean fallbackMode;
-    private String host, database, username, password;
-    private int port;
-    private String tablePrefix;
+    private HikariDataSource dataSource;
     private boolean useMySQL;
+    private String host;
+    private int port;
+    private String database;
+    private String username;
+    private String password;
+    private String tablePrefix;
+    private boolean fallbackMode = false;
+    private Connection fallbackConnection = null;
+    private long lastSyncTime = 0;
+    private boolean reduceLogging;
 
     public DatabaseManager(Veinminer plugin) {
         this.plugin = plugin;
-        this.fallbackMode = false;
     }
 
     /**
-     * Initialize the database connection
+     * Initialize the database manager
      */
     public void initialize() {
         // Load database settings from config
         useMySQL = plugin.getConfig().getBoolean("database.use-mysql", false);
         host = plugin.getConfig().getString("database.host", "localhost");
         port = plugin.getConfig().getInt("database.port", 3306);
-
-        // Get database name - check both possible config paths
-        if (plugin.getConfig().isString("database.name")) {
-            database = plugin.getConfig().getString("database.name", "veinminer");
-        } else {
-            database = "veinminer"; // Default value
-            plugin.getLogger().warning("Database name not found in config. Using default: veinminer");
-        }
-
+        database = plugin.getConfig().getString("database.name", "veinminer");
         username = plugin.getConfig().getString("database.username", "root");
         password = plugin.getConfig().getString("database.password", "");
         tablePrefix = plugin.getConfig().getString("database.table-prefix", "vm_");
+        reduceLogging = plugin.getConfig().getBoolean("database.reduce-logging", true);
 
-        plugin.getLogger().info("Database settings: useMySQL=" + useMySQL + ", host=" + host + ", port=" + port +
-                ", database=" + database + ", username=" + username + ", tablePrefix=" + tablePrefix);
+        // Log database settings (without password)
+        plugin.getLogger().info("Database settings: useMySQL=" + useMySQL + ", host=" + host + ", port=" + port + ", database=" + database + ", username=" + username + ", tablePrefix=" + tablePrefix);
 
         if (useMySQL) {
             // Try to connect to MySQL
             try {
-                // Try to create the database if it doesn't exist
-                tryCreateDatabase();
-
-                // Use the newer driver class name
-                Class.forName("com.mysql.cj.jdbc.Driver");
-                String url = "jdbc:mysql://" + host + ":" + port + "/" + database + "?useSSL=false&autoReconnect=true&allowPublicKeyRetrieval=true";
-                plugin.getLogger().info("Attempting to connect to MySQL database: " + url);
-                connection = DriverManager.getConnection(url, username, password);
-                plugin.getLogger().info("Connected to MySQL database.");
-                fallbackMode = false;
-                return; // Successfully connected to MySQL, so return early
-            } catch (ClassNotFoundException e) {
-                // Try the older driver class name
-                try {
-                    Class.forName("com.mysql.jdbc.Driver");
-                    String url = "jdbc:mysql://" + host + ":" + port + "/" + database + "?useSSL=false&autoReconnect=true";
-                    plugin.getLogger().info("Attempting to connect to MySQL database with legacy driver: " + url);
-                    connection = DriverManager.getConnection(url, username, password);
-                    plugin.getLogger().info("Connected to MySQL database with legacy driver.");
-                    fallbackMode = false;
-                    return; // Successfully connected to MySQL, so return early
-                } catch (ClassNotFoundException | SQLException ex) {
-                    plugin.getLogger().severe("Failed to connect to MySQL database with legacy driver: " + ex.getMessage());
-                    plugin.getLogger().severe("Falling back to SQLite database.");
-                    fallbackMode = true;
-                }
-            } catch (SQLException e) {
+                setupHikariCP();
+            } catch (Exception e) {
                 plugin.getLogger().severe("Failed to connect to MySQL database: " + e.getMessage());
-                plugin.getLogger().severe("Falling back to SQLite database.");
+                plugin.getLogger().warning("Falling back to SQLite...");
+                useMySQL = false;
                 fallbackMode = true;
+                setupSQLite();
             }
         } else {
-            fallbackMode = true;
-        }
-
-        if (fallbackMode) {
-            // Use SQLite as fallback
-            try {
-                Class.forName("org.sqlite.JDBC");
-                String url = "jdbc:sqlite:" + plugin.getDataFolder().getAbsolutePath() + "/veinminer.db";
-                connection = DriverManager.getConnection(url);
-                plugin.getLogger().info("Connected to SQLite database.");
-            } catch (ClassNotFoundException | SQLException e) {
-                plugin.getLogger().severe("Failed to connect to SQLite database: " + e.getMessage());
-                plugin.getLogger().severe("Plugin will continue without database support.");
-                connection = null;
-            }
+            // Use SQLite
+            setupSQLite();
         }
     }
 
     /**
-     * Try to create the database if it doesn't exist
+     * Set up HikariCP connection pool for MySQL
      */
-    private void tryCreateDatabase() {
-        String url = "jdbc:mysql://" + host + ":" + port + "?useSSL=false&autoReconnect=true&allowPublicKeyRetrieval=true";
-        plugin.getLogger().info("Trying to connect to MySQL server to check/create database: " + url);
-
-        try (Connection rootConnection = DriverManager.getConnection(url, username, password);
-             Statement stmt = rootConnection.createStatement()) {
-
-            plugin.getLogger().info("Connected to MySQL server. Checking if database exists...");
-
-            // Check if database exists
-            ResultSet rs = stmt.executeQuery("SHOW DATABASES LIKE '" + database + "'");
-            if (!rs.next()) {
-                // Database doesn't exist, create it
-                plugin.getLogger().info("Database '" + database + "' does not exist. Creating...");
-                stmt.executeUpdate("CREATE DATABASE IF NOT EXISTS `" + database + "` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
-                plugin.getLogger().info("Database '" + database + "' created successfully!");
-            } else {
-                plugin.getLogger().info("Database '" + database + "' already exists.");
-            }
-        } catch (SQLException e) {
-            plugin.getLogger().severe("Failed to create database: " + e.getMessage());
-            plugin.getLogger().severe("Please make sure your MySQL user has CREATE DATABASE privileges or create the database manually.");
+    private void setupHikariCP() {
+        HikariConfig config = new HikariConfig();
+        config.setJdbcUrl("jdbc:mysql://" + host + ":" + port + "/" + database + "?useSSL=false&autoReconnect=true&allowPublicKeyRetrieval=true");
+        config.setUsername(username);
+        config.setPassword(password);
+        
+        // Optimierte Pool-Einstellungen für mehrere Server
+        config.setMaximumPoolSize(20); // Erhöht für mehrere Server
+        config.setMinimumIdle(5);
+        config.setIdleTimeout(300000); // 5 Minuten
+        config.setConnectionTimeout(10000); // 10 Sekunden
+        config.setMaxLifetime(1800000); // 30 Minuten
+        
+        // Optimierte Einstellungen für hohe Last
+        config.addDataSourceProperty("cachePrepStmts", "true");
+        config.addDataSourceProperty("prepStmtCacheSize", "250");
+        config.addDataSourceProperty("prepStmtCacheSqlLimit", "2048");
+        config.addDataSourceProperty("useServerPrepStmts", "true");
+        
+        // Verbesserte Fehlerbehandlung
+        config.setLeakDetectionThreshold(30000); // 30 Sekunden
+        config.setConnectionTestQuery("SELECT 1");
+        
+        // Server-spezifische Einstellungen
+        String serverId = "server-" + System.currentTimeMillis();
+        config.addDataSourceProperty("serverName", serverId);
+        config.addDataSourceProperty("applicationName", "VeinMiner-" + serverId);
+        
+        try {
+            dataSource = new HikariDataSource(config);
+            plugin.getLogger().info("HikariCP connection pool initialized successfully");
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to initialize HikariCP: " + e.getMessage(), e);
         }
     }
 
-    // Update the createTables method to add the claimed column
-    public void createTables() {
-        if (connection == null) {
-            return;
+    /**
+     * Set up SQLite connection
+     */
+    private void setupSQLite() {
+        try {
+            // Ensure the data folder exists
+            if (!plugin.getDataFolder().exists()) {
+                plugin.getDataFolder().mkdir();
+            }
+
+            // Connect to SQLite database
+            Class.forName("org.sqlite.JDBC");
+            String url = "jdbc:sqlite:" + plugin.getDataFolder() + "/veinminer.db";
+            fallbackConnection = DriverManager.getConnection(url);
+
+            plugin.getLogger().info("Connected to SQLite database.");
+        } catch (ClassNotFoundException | SQLException e) {
+            plugin.getLogger().severe("Failed to connect to SQLite database: " + e.getMessage());
+            fallbackMode = true;
         }
+    }
+
+    /**
+     * Create database tables
+     */
+    public void createTables() {
+        Connection connection = null;
+        Statement statement = null;
 
         try {
-            Statement statement = connection.createStatement();
+            connection = getConnection();
+            if (connection == null) {
+                plugin.getLogger().severe("Failed to create tables: No database connection");
+                return;
+            }
 
-            // Player data table
+            // Create player_data table
             String playerDataTable = "CREATE TABLE IF NOT EXISTS " + tablePrefix + "player_data (" +
                     "uuid VARCHAR(36) PRIMARY KEY, " +
                     "player_name VARCHAR(16) NOT NULL, " +
-                    "enabled BOOLEAN DEFAULT TRUE, " +
+                    "veinminer_enabled BOOLEAN DEFAULT 0, " +
                     "level INT DEFAULT 1, " +
                     "experience INT DEFAULT 0, " +
-                    "blocks_mined INT DEFAULT 0, " +
-                    "pickaxe_enabled BOOLEAN DEFAULT TRUE, " +
-                    "axe_enabled BOOLEAN DEFAULT TRUE, " +
-                    "shovel_enabled BOOLEAN DEFAULT TRUE, " +
-                    "hoe_enabled BOOLEAN DEFAULT TRUE, " +
+                    "blocks_mined BIGINT DEFAULT 0, " +
+                    "skill_points INT DEFAULT 0, " +
                     "efficiency_level INT DEFAULT 0, " +
                     "luck_level INT DEFAULT 0, " +
-                    "energy_level INT DEFAULT 0" +
+                    "energy_level INT DEFAULT 0, " +
+                    "pickaxe_enabled BOOLEAN DEFAULT 0, " +
+                    "axe_enabled BOOLEAN DEFAULT 0, " +
+                    "shovel_enabled BOOLEAN DEFAULT 0, " +
+                    "hoe_enabled BOOLEAN DEFAULT 0, " +
+                    "last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP" +
                     ")";
-            statement.executeUpdate(playerDataTable);
 
-            // Achievements table
+            // Create achievements table
             String achievementsTable = "CREATE TABLE IF NOT EXISTS " + tablePrefix + "achievements (" +
-                    "uuid VARCHAR(36) NOT NULL, " +
-                    "achievement_id VARCHAR(32) NOT NULL, " +
-                    "progress INT DEFAULT 0, " +
-                    "completed BOOLEAN DEFAULT FALSE, " +
-                    "claimed BOOLEAN DEFAULT FALSE, " +
-                    "PRIMARY KEY (uuid, achievement_id)" +
-                    ")";
-            statement.executeUpdate(achievementsTable);
-
-            // Sync table for multi-server setups
-            String syncTable = "CREATE TABLE IF NOT EXISTS " + tablePrefix + "sync (" +
                     "id INT AUTO_INCREMENT PRIMARY KEY, " +
-                    "timestamp BIGINT NOT NULL, " +
-                    "server_id VARCHAR(36) NOT NULL, " +
-                    "player_uuid VARCHAR(36) NOT NULL, " +
-                    "data_type VARCHAR(32) NOT NULL, " +
-                    "data_key VARCHAR(64) NOT NULL, " +
-                    "data_value TEXT" +
+                    "uuid VARCHAR(36) NOT NULL, " +
+                    "achievement_id VARCHAR(64) NOT NULL, " +
+                    "progress INT DEFAULT 0, " +
+                    "completed BOOLEAN DEFAULT 0, " +
+                    "reward_claimed BOOLEAN DEFAULT 0, " +
+                    "UNIQUE (uuid, achievement_id)" +
                     ")";
-            statement.executeUpdate(syncTable);
 
-            statement.close();
-            plugin.getLogger().info("Database tables created successfully.");
+            // Create sync_status table for multiserver setups
+            String syncStatusTable = "CREATE TABLE IF NOT EXISTS " + tablePrefix + "sync_status (" +
+                    "id INT AUTO_INCREMENT PRIMARY KEY, " +
+                    "server_id VARCHAR(36) NOT NULL, " +
+                    "last_sync TIMESTAMP DEFAULT CURRENT_TIMESTAMP, " +
+                    "UNIQUE (server_id)" +
+                    ")";
+
+            // Execute create table statements
+            statement = connection.createStatement();
+
+            // SQLite doesn't support AUTO_INCREMENT or TIMESTAMP
+            if (isFallbackMode()) {
+                playerDataTable = playerDataTable.replace("TIMESTAMP DEFAULT CURRENT_TIMESTAMP", "TEXT DEFAULT CURRENT_TIMESTAMP");
+                achievementsTable = achievementsTable.replace("INT AUTO_INCREMENT PRIMARY KEY", "INTEGER PRIMARY KEY AUTOINCREMENT");
+                syncStatusTable = syncStatusTable.replace("INT AUTO_INCREMENT PRIMARY KEY", "INTEGER PRIMARY KEY AUTOINCREMENT")
+                        .replace("TIMESTAMP DEFAULT CURRENT_TIMESTAMP", "TEXT DEFAULT CURRENT_TIMESTAMP");
+            }
+
+            statement.executeUpdate(playerDataTable);
+            statement.executeUpdate(achievementsTable);
+            statement.executeUpdate(syncStatusTable);
+
+            plugin.getLogger().info("Database tables created/verified.");
         } catch (SQLException e) {
             plugin.getLogger().severe("Failed to create database tables: " + e.getMessage());
-            if (plugin.isDebugMode()) {
-                e.printStackTrace();
-            }
+        } finally {
+            // Close resources
+            closeResourcesInternal(null, statement, connection);
         }
     }
 
-    // Update the updateDatabaseSchema method to add the claimed column if it doesn't exist
+    /**
+     * Update database schema if needed
+     */
     public void updateDatabaseSchema() {
-        if (connection == null) {
-            return;
-        }
+        Connection connection = null;
 
         try {
-            // Check if skills columns exist, if not add them
-            if (!fallbackMode) {
-                // For MySQL
-                Statement statement = connection.createStatement();
-
-                // Check if efficiency_level column exists
-                try {
-                    statement.executeUpdate("ALTER TABLE " + tablePrefix + "player_data ADD COLUMN efficiency_level INT DEFAULT 0");
-                    plugin.getLogger().info("Added efficiency_level column to player_data table.");
-                } catch (SQLException e) {
-                    // Column already exists
-                }
-
-                // Check if luck_level column exists
-                try {
-                    statement.executeUpdate("ALTER TABLE " + tablePrefix + "player_data ADD COLUMN luck_level INT DEFAULT 0");
-                    plugin.getLogger().info("Added luck_level column to player_data table.");
-                } catch (SQLException e) {
-                    // Column already exists
-                }
-
-                // Check if energy_level column exists
-                try {
-                    statement.executeUpdate("ALTER TABLE " + tablePrefix + "player_data ADD COLUMN energy_level INT DEFAULT 0");
-                    plugin.getLogger().info("Added energy_level column to player_data table.");
-                } catch (SQLException e) {
-                    // Column already exists
-                }
-
-                // Check if claimed column exists in achievements table
-                try {
-                    statement.executeUpdate("ALTER TABLE " + tablePrefix + "achievements ADD COLUMN claimed BOOLEAN DEFAULT FALSE");
-                    plugin.getLogger().info("Added claimed column to achievements table.");
-                } catch (SQLException e) {
-                    // Column already exists
-                }
-
-                statement.close();
-            } else {
-                // For SQLite
-                // SQLite doesn't support ALTER TABLE ADD COLUMN IF NOT EXISTS
-                // So we need to check if the column exists first
-
-                Statement statement = connection.createStatement();
-                ResultSet resultSet = statement.executeQuery("PRAGMA table_info(" + tablePrefix + "player_data)");
-
-                boolean hasEfficiencyLevel = false;
-                boolean hasLuckLevel = false;
-                boolean hasEnergyLevel = false;
-
-                while (resultSet.next()) {
-                    String columnName = resultSet.getString("name");
-                    if (columnName.equals("efficiency_level")) {
-                        hasEfficiencyLevel = true;
-                    } else if (columnName.equals("luck_level")) {
-                        hasLuckLevel = true;
-                    } else if (columnName.equals("energy_level")) {
-                        hasEnergyLevel = true;
-                    }
-                }
-
-                resultSet.close();
-
-                // Add missing columns
-                if (!hasEfficiencyLevel) {
-                    statement.executeUpdate("ALTER TABLE " + tablePrefix + "player_data ADD COLUMN efficiency_level INT DEFAULT 0");
-                    plugin.getLogger().info("Added efficiency_level column to player_data table.");
-                }
-
-                if (!hasLuckLevel) {
-                    statement.executeUpdate("ALTER TABLE " + tablePrefix + "player_data ADD COLUMN luck_level INT DEFAULT 0");
-                    plugin.getLogger().info("Added luck_level column to player_data table.");
-                }
-
-                if (!hasEnergyLevel) {
-                    statement.executeUpdate("ALTER TABLE " + tablePrefix + "player_data ADD COLUMN energy_level INT DEFAULT 0");
-                    plugin.getLogger().info("Added energy_level column to player_data table.");
-                }
-
-                // Check if claimed column exists in achievements table
-                ResultSet achievementsResultSet = statement.executeQuery("PRAGMA table_info(" + tablePrefix + "achievements)");
-
-                boolean hasClaimedColumn = false;
-
-                while (achievementsResultSet.next()) {
-                    String columnName = achievementsResultSet.getString("name");
-                    if (columnName.equals("claimed")) {
-                        hasClaimedColumn = true;
-                        break;
-                    }
-                }
-
-                achievementsResultSet.close();
-
-                if (!hasClaimedColumn) {
-                    statement.executeUpdate("ALTER TABLE " + tablePrefix + "achievements ADD COLUMN claimed BOOLEAN DEFAULT FALSE");
-                    plugin.getLogger().info("Added claimed column to achievements table.");
-                }
-
-                statement.close();
+            connection = getConnection();
+            if (connection == null) {
+                plugin.getLogger().severe("Failed to update database schema: No database connection");
+                return;
             }
+
+            // Check if columns exist and add them if they don't
+            checkAndAddColumn(connection, tablePrefix + "player_data", "skill_points", "INT DEFAULT 0");
+            checkAndAddColumn(connection, tablePrefix + "player_data", "efficiency_level", "INT DEFAULT 0");
+            checkAndAddColumn(connection, tablePrefix + "player_data", "luck_level", "INT DEFAULT 0");
+            checkAndAddColumn(connection, tablePrefix + "player_data", "energy_level", "INT DEFAULT 0");
+            checkAndAddColumn(connection, tablePrefix + "player_data", "last_updated", isFallbackMode() ? "TEXT DEFAULT CURRENT_TIMESTAMP" : "TIMESTAMP DEFAULT CURRENT_TIMESTAMP");
+
+            plugin.getLogger().info("Database schema updated if needed.");
         } catch (SQLException e) {
             plugin.getLogger().severe("Failed to update database schema: " + e.getMessage());
-            if (plugin.isDebugMode()) {
-                e.printStackTrace();
-            }
+        } finally {
+            // Close resources
+            closeResourcesInternal(null, null, connection);
         }
     }
 
-    // Add method to update achievement schema for new achievements
-    public void updateAchievementSchema() {
-        if (connection == null) {
-            return;
+    /**
+     * Check if a column exists in a table and add it if it doesn't
+     * @param connection The database connection
+     * @param table The table name
+     * @param column The column name
+     * @param definition The column definition
+     * @throws SQLException If an SQL error occurs
+     */
+    private void checkAndAddColumn(Connection connection, String table, String column, String definition) throws SQLException {
+        // Check if column exists
+        boolean columnExists = false;
+        ResultSet resultSet = null;
+        PreparedStatement statement = null;
+        Statement alterStatement = null;
+
+        try {
+            if (isFallbackMode()) {
+                // SQLite
+                resultSet = connection.getMetaData().getColumns(null, null, table, column);
+            } else {
+                // MySQL
+                String sql = "SHOW COLUMNS FROM " + table + " LIKE ?";
+                statement = connection.prepareStatement(sql);
+                statement.setString(1, column);
+                resultSet = statement.executeQuery();
+            }
+
+            columnExists = resultSet.next();
+        } catch (SQLException e) {
+            plugin.getLogger().warning("Failed to check if column exists: " + e.getMessage());
+        } finally {
+            closeResourcesInternal(resultSet, statement, null);
         }
 
-        // This method ensures all defined achievements have entries in the database
-        try {
-            // Get all achievement IDs from the plugin's achievement definitions
-            Set<String> definedAchievements = plugin.getAchievementManager().getAchievementDefinitions().keySet();
-
-            plugin.getLogger().info("Updating achievement schema with " + definedAchievements.size() + " defined achievements");
-            for (String achievementId : definedAchievements) {
-                plugin.getLogger().info("Found achievement in config: " + achievementId);
-            }
-
-            // For online players, ensure they have entries for all defined achievements
-            for (Player player : plugin.getServer().getOnlinePlayers()) {
-                UUID playerUUID = player.getUniqueId();
-
-                // Get the player's existing achievements from database directly
-                Map<String, Integer> playerAchievements = new HashMap<>();
-
-                String sql = "SELECT achievement_id FROM " + tablePrefix + "achievements WHERE uuid = ?";
-                PreparedStatement statement = connection.prepareStatement(sql);
-                statement.setString(1, playerUUID.toString());
-                ResultSet resultSet = statement.executeQuery();
-
-                while (resultSet.next()) {
-                    String achievementId = resultSet.getString("achievement_id");
-                    playerAchievements.put(achievementId, 0); // We only need the keys here
+        // Add column if it doesn't exist
+        if (!columnExists) {
+            try {
+                String sql = "ALTER TABLE " + table + " ADD COLUMN " + column + " " + definition;
+                alterStatement = connection.createStatement();
+                alterStatement.executeUpdate(sql);
+                plugin.getLogger().info("Added column " + column + " to table " + table);
+            } finally {
+                if (alterStatement != null) {
+                    alterStatement.close();
                 }
-
-                resultSet.close();
-                statement.close();
-
-                plugin.getLogger().info("Player " + player.getName() + " has " + playerAchievements.size() + " achievements in database");
-
-                // For each defined achievement, ensure the player has an entry
-                for (String achievementId : definedAchievements) {
-                    if (!playerAchievements.containsKey(achievementId)) {
-                        // Add a default entry for this achievement
-                        String insertSql;
-
-                        if (!fallbackMode) {
-                            // MySQL syntax
-                            insertSql = "INSERT IGNORE INTO " + tablePrefix + "achievements " +
-                                    "(uuid, achievement_id, progress, completed, claimed) " +
-                                    "VALUES (?, ?, 0, 0, 0)";
-                        } else {
-                            // SQLite syntax
-                            insertSql = "INSERT OR IGNORE INTO " + tablePrefix + "achievements " +
-                                    "(uuid, achievement_id, progress, completed, claimed) " +
-                                    "VALUES (?, ?, 0, 0, 0)";
-                        }
-
-                        PreparedStatement insertStatement = connection.prepareStatement(insertSql);
-                        insertStatement.setString(1, playerUUID.toString());
-                        insertStatement.setString(2, achievementId);
-                        insertStatement.executeUpdate();
-                        insertStatement.close();
-
-                        plugin.getLogger().info("Added new achievement " + achievementId + " for player " + player.getName());
-                    }
-                }
-            }
-
-            plugin.getLogger().info("Achievement schema updated for online players");
-        } catch (SQLException e) {
-            plugin.getLogger().severe("Failed to update achievement schema: " + e.getMessage());
-            if (plugin.isDebugMode()) {
-                e.printStackTrace();
             }
         }
     }
 
     /**
-     * Get the database connection
-     * @return The database connection
+     * Get a database connection
+     * @return A database connection, or null if an error occurs
      */
     public Connection getConnection() {
-        return connection;
+        if (isFallbackMode()) {
+            return fallbackConnection;
+        }
+
+        try {
+            // Setze einen kürzeren Timeout für das Abrufen einer Verbindung
+            Connection connection = dataSource.getConnection();
+
+            // Setze einen Timeout für Datenbankoperationen
+            connection.setNetworkTimeout(java.util.concurrent.Executors.newSingleThreadExecutor(),
+                    5000); // 5 Sekunden Timeout
+
+            return connection;
+        } catch (SQLException e) {
+            if (!reduceLogging) {
+                plugin.getLogger().severe("Failed to get database connection: " + e.getMessage());
+            }
+            return null;
+        }
+    }
+
+    /**
+     * Check if the database connection is valid without opening a new connection
+     * @return True if the connection is valid, false otherwise
+     */
+    public boolean isConnectionValid() {
+        if (isFallbackMode()) {
+            try {
+                return fallbackConnection != null && !fallbackConnection.isClosed() && fallbackConnection.isValid(2);
+            } catch (SQLException e) {
+                if (!reduceLogging) {
+                    plugin.getLogger().warning("Failed to check fallback connection validity: " + e.getMessage());
+                }
+                return false;
+            }
+        } else {
+            try {
+                // Prüfe, ob der DataSource verfügbar ist
+                if (dataSource == null || dataSource.isClosed()) {
+                    return false;
+                }
+
+                // Teste eine Verbindung mit kurzem Timeout
+                Connection testConnection = null;
+                try {
+                    testConnection = dataSource.getConnection();
+                    boolean isValid = testConnection != null && testConnection.isValid(2);
+                    return isValid;
+                } finally {
+                    if (testConnection != null) {
+                        try {
+                            testConnection.close();
+                        } catch (SQLException e) {
+                            if (!reduceLogging) {
+                                plugin.getLogger().warning("Failed to close test connection: " + e.getMessage());
+                            }
+                        }
+                    }
+                }
+            } catch (SQLException e) {
+                if (!reduceLogging) {
+                    plugin.getLogger().warning("Failed to check connection validity: " + e.getMessage());
+                }
+                return false;
+            }
+        }
+    }
+
+    /**
+     * Check if the database connection is valid
+     * @return True if the connection is valid, false otherwise
+     */
+    public boolean checkConnection() {
+        // Zuerst prüfen, ob wir den Status ohne neue Verbindung prüfen können
+        if (isConnectionValid()) {
+            return true;
+        }
+
+        Connection connection = null;
+        try {
+            connection = getConnection();
+            return connection != null && !connection.isClosed();
+        } catch (SQLException e) {
+            if (!reduceLogging) {
+                plugin.getLogger().severe("Database connection check failed: " + e.getMessage());
+            }
+            return false;
+        } finally {
+            // Wichtig: Verbindung immer schließen
+            if (connection != null && !isFallbackMode()) {
+                try {
+                    connection.close();
+                } catch (SQLException e) {
+                    if (!reduceLogging) {
+                        plugin.getLogger().warning("Failed to close connection in checkConnection: " + e.getMessage());
+                    }
+                }
+            }
+        }
     }
 
     /**
      * Close the database connection
      */
     public void close() {
-        if (connection != null) {
+        if (isFallbackMode()) {
             try {
-                connection.close();
-                plugin.getLogger().info("Database connection closed.");
+                if (fallbackConnection != null && !fallbackConnection.isClosed()) {
+                    fallbackConnection.close();
+                }
             } catch (SQLException e) {
-                plugin.getLogger().warning("Failed to close database connection: " + e.getMessage());
+                plugin.getLogger().warning("Failed to close SQLite connection: " + e.getMessage());
+            }
+        } else {
+            if (dataSource != null && !dataSource.isClosed()) {
+                dataSource.close();
             }
         }
     }
 
     /**
-     * Check if the database is in fallback mode
+     * Check if the database manager is in fallback mode (SQLite)
      * @return True if in fallback mode, false otherwise
      */
     public boolean isFallbackMode() {
-        return fallbackMode;
+        return fallbackMode || !useMySQL;
     }
 
     /**
@@ -425,185 +426,232 @@ public class DatabaseManager {
     }
 
     /**
-     * Synchronize data across servers
+     * Synchronize data with other servers
+     * This is called periodically to check for updates from other servers
      */
     public void synchronizeData() {
-        if (connection == null || fallbackMode) {
+        // Only synchronize if using MySQL and not in fallback mode
+        if (isFallbackMode()) {
             return;
         }
 
-        try {
-            // Check for updates from other servers
-            String sql = "SELECT * FROM " + tablePrefix + "sync WHERE server_id != ? AND timestamp > ?";
-            PreparedStatement statement = connection.prepareStatement(sql);
-            statement.setString(1, plugin.getBStatsServerUUID());
-            statement.setLong(2, System.currentTimeMillis() - 60000); // Last minute
-
-            ResultSet resultSet = statement.executeQuery();
-
-            while (resultSet.next()) {
-                String playerUUID = resultSet.getString("player_uuid");
-                String dataType = resultSet.getString("data_type");
-                String dataKey = resultSet.getString("data_key");
-                String dataValue = resultSet.getString("data_value");
-
-                // Process the update
-                processUpdate(playerUUID, dataType, dataKey, dataValue);
-            }
-
-            resultSet.close();
-            statement.close();
-        } catch (SQLException e) {
-            plugin.getLogger().warning("Failed to synchronize data: " + e.getMessage());
+        // Don't synchronize too frequently
+        long currentTime = System.currentTimeMillis();
+        if (currentTime - lastSyncTime < TimeUnit.SECONDS.toMillis(10)) {
+            return;
         }
+
+        lastSyncTime = currentTime;
+
+        // Update our server's sync status
+        updateSyncStatus();
+
+        // No need to do anything else - each server will load the latest data when needed
     }
 
     /**
-     * Process an update from another server
-     * @param playerUUID The player UUID
-     * @param dataType The data type
-     * @param dataKey The data key
-     * @param dataValue The data value
-     */
-    private void processUpdate(String playerUUID, String dataType, String dataKey, String dataValue) {
-        // Implementation depends on the data type
-        // For example, if dataType is "achievement", update the achievement progress
-    }
-
-    /**
-     * Force synchronization of data
+     * Force synchronization now
+     * This is called when a player uses the /vmsync command
      */
     public void forceSyncNow() {
-        synchronizeData();
-    }
-
-    /**
-     * Notify other servers about an achievement update
-     * @param player The player
-     * @param achievementId The achievement ID
-     * @param progress The progress
-     */
-    public void notifyAchievementUpdate(Player player, String achievementId, int progress) {
-        if (connection == null || fallbackMode) {
+        // Only synchronize if using MySQL and not in fallback mode
+        if (isFallbackMode()) {
             return;
         }
 
-        try {
-            String sql = "INSERT INTO " + tablePrefix + "sync (timestamp, server_id, player_uuid, data_type, data_key, data_value) " +
-                    "VALUES (?, ?, ?, ?, ?, ?)";
-            PreparedStatement statement = connection.prepareStatement(sql);
-            statement.setLong(1, System.currentTimeMillis());
-            statement.setString(2, plugin.getBStatsServerUUID());
-            statement.setString(3, player.getUniqueId().toString());
-            statement.setString(4, "achievement");
-            statement.setString(5, achievementId);
-            statement.setString(6, String.valueOf(progress));
+        // Update our server's sync status
+        updateSyncStatus();
 
+        // No need to do anything else - each server will load the latest data when needed
+    }
+
+    /**
+     * Update this server's sync status
+     */
+    private void updateSyncStatus() {
+        Connection connection = null;
+        PreparedStatement statement = null;
+
+        try {
+            connection = getConnection();
+            if (connection == null) {
+                return;
+            }
+
+            // Get server ID
+            String serverId = plugin.getBStatsServerUUID();
+
+            // Update or insert sync status
+            String sql = "INSERT INTO " + tablePrefix + "sync_status (server_id, last_sync) VALUES (?, NOW()) " +
+                    "ON DUPLICATE KEY UPDATE last_sync = NOW()";
+
+            // SQLite doesn't support ON DUPLICATE KEY UPDATE
+            if (isFallbackMode()) {
+                sql = "INSERT OR REPLACE INTO " + tablePrefix + "sync_status (server_id, last_sync) VALUES (?, datetime('now'))";
+            }
+
+            statement = connection.prepareStatement(sql);
+            statement.setString(1, serverId);
             statement.executeUpdate();
-            statement.close();
         } catch (SQLException e) {
-            plugin.getLogger().warning("Failed to notify achievement update: " + e.getMessage());
+            if (!reduceLogging) {
+                plugin.getLogger().warning("Failed to update sync status: " + e.getMessage());
+            }
+        } finally {
+            closeResourcesInternal(null, statement, connection);
         }
     }
 
     /**
-     * Load player achievements from the database
-     * @param player The player
-     * @return A map of achievement IDs to progress
+     * Debug method to dump player data from the database
+     * @param uuid The player UUID
+     * @return A string with the player data
      */
-    public Map<String, Integer> loadPlayerAchievements(Player player) {
-        Map<String, Integer> achievements = new HashMap<>();
-
-        if (connection == null) {
-            return achievements;
-        }
+    public String dumpPlayerData(String uuid) {
+        StringBuilder result = new StringBuilder();
+        Connection connection = null;
+        PreparedStatement statement = null;
+        ResultSet resultSet = null;
 
         try {
-            if (!checkConnection()) {
-                plugin.getLogger().warning("Cannot load achievements: Database connection check failed");
-                return achievements;
+            connection = getConnection();
+            if (connection == null) {
+                return "Failed to get database connection";
             }
 
-            String sql = "SELECT * FROM " + tablePrefix + "achievements WHERE uuid = ?";
-            PreparedStatement statement = connection.prepareStatement(sql);
-            statement.setString(1, player.getUniqueId().toString());
+            String sql = "SELECT * FROM " + tablePrefix + "player_data WHERE uuid = ?";
+            statement = connection.prepareStatement(sql);
+            statement.setString(1, uuid);
 
-            ResultSet resultSet = statement.executeQuery();
-
-            while (resultSet.next()) {
-                String achievementId = resultSet.getString("achievement_id");
-                int progress = resultSet.getInt("progress");
-                achievements.put(achievementId, progress);
+            resultSet = statement.executeQuery();
+            if (resultSet.next()) {
+                result.append("Player data for ").append(resultSet.getString("player_name")).append(":\n");
+                result.append("- UUID: ").append(resultSet.getString("uuid")).append("\n");
+                result.append("- VeinMiner Enabled: ").append(resultSet.getBoolean("veinminer_enabled")).append("\n");
+                result.append("- Level: ").append(resultSet.getInt("level")).append("\n");
+                result.append("- Experience: ").append(resultSet.getInt("experience")).append("\n");
+                result.append("- Blocks Mined: ").append(resultSet.getLong("blocks_mined")).append("\n");
+                result.append("- Skill Points: ").append(resultSet.getInt("skill_points")).append("\n");
+                result.append("- Efficiency Level: ").append(resultSet.getInt("efficiency_level")).append("\n");
+                result.append("- Luck Level: ").append(resultSet.getInt("luck_level")).append("\n");
+                result.append("- Energy Level: ").append(resultSet.getInt("energy_level")).append("\n");
+                result.append("- Pickaxe Enabled: ").append(resultSet.getBoolean("pickaxe_enabled")).append("\n");
+                result.append("- Axe Enabled: ").append(resultSet.getBoolean("axe_enabled")).append("\n");
+                result.append("- Shovel Enabled: ").append(resultSet.getBoolean("shovel_enabled")).append("\n");
+                result.append("- Hoe Enabled: ").append(resultSet.getBoolean("hoe_enabled")).append("\n");
+                result.append("- Last Updated: ").append(resultSet.getString("last_updated")).append("\n");
+            } else {
+                result.append("No player data found for UUID: ").append(uuid);
             }
-
-            resultSet.close();
-            statement.close();
+            return result.toString();
         } catch (SQLException e) {
-            plugin.getLogger().warning("Failed to load achievements for " + player.getName() + ": " + e.getMessage());
-            if (plugin.isDebugMode()) {
-                e.printStackTrace();
-            }
-        }
-
-        return achievements;
-    }
-
-    /**
-     * Check database connection and reconnect if needed
-     * @return true if connection is valid, false otherwise
-     */
-    public boolean checkConnection() {
-        try {
-            if (connection == null || connection.isClosed()) {
-                plugin.getLogger().warning("Database connection lost. Attempting to reconnect...");
-                initialize();
-                return connection != null && !connection.isClosed();
-            }
-            return true;
-        } catch (SQLException e) {
-            plugin.getLogger().severe("Failed to check database connection: " + e.getMessage());
-            if (plugin.isDebugMode()) {
-                e.printStackTrace();
-            }
-            return false;
+            result.append("Error retrieving player data: ").append(e.getMessage());
+            return result.toString();
+        } finally {
+            closeResourcesInternal(resultSet, statement, connection);
         }
     }
 
     /**
-     * Get the local achievement cache
-     * @return The local achievement cache
+     * Helper method to close database resources (public version for use by other classes)
+     * @param resultSet The result set to close
+     * @param statement The statement to close
+     * @param connection The connection to close
      */
-    public Map<UUID, Map<String, Integer>> getLocalAchievementCache() {
-        Map<UUID, Map<String, Integer>> cache = new HashMap<>();
+    public void closeResources(ResultSet resultSet, Statement statement, Connection connection) {
+        closeResourcesInternal(resultSet, statement, connection);
+    }
 
-        if (connection == null) {
-            return cache;
+    /**
+     * Helper method to close database resources (private version)
+     * @param resultSet The result set to close
+     * @param statement The statement to close
+     * @param connection The connection to close
+     */
+    private void closeResourcesInternal(ResultSet resultSet, Statement statement, Connection connection) {
+        // Schließe in umgekehrter Reihenfolge der Erstellung
+        if (resultSet != null) {
+            try {
+                resultSet.close();
+            } catch (SQLException e) {
+                plugin.getLogger().warning("Failed to close ResultSet: " + e.getMessage());
+            }
         }
 
-        try {
-            String sql = "SELECT * FROM " + tablePrefix + "achievements";
-            PreparedStatement statement = connection.prepareStatement(sql);
+        if (statement != null) {
+            try {
+                statement.close();
+            } catch (SQLException e) {
+                plugin.getLogger().warning("Failed to close Statement: " + e.getMessage());
+            }
+        }
 
-            ResultSet resultSet = statement.executeQuery();
-
-            while (resultSet.next()) {
-                UUID playerUUID = UUID.fromString(resultSet.getString("uuid"));
-                String achievementId = resultSet.getString("achievement_id");
-                int progress = resultSet.getInt("progress");
-
-                if (!cache.containsKey(playerUUID)) {
-                    cache.put(playerUUID, new HashMap<>());
+        if (connection != null && !isFallbackMode()) {
+            try {
+                if (!connection.isClosed()) {
+                    if (!connection.getAutoCommit()) {
+                        try {
+                            connection.rollback();
+                        } catch (SQLException e) {
+                            plugin.getLogger().warning("Failed to rollback transaction: " + e.getMessage());
+                        }
+                    }
+                    connection.close();
                 }
+            } catch (SQLException e) {
+                plugin.getLogger().warning("Failed to close Connection: " + e.getMessage());
+            }
+        }
+    }
 
-                cache.get(playerUUID).put(achievementId, progress);
+    /**
+     * Execute a database operation within a transaction
+     * @param operation The database operation to execute
+     * @param <T> The return type of the operation
+     * @return The result of the operation
+     * @throws SQLException If the operation fails
+     */
+    public <T> T executeInTransaction(DatabaseOperation<T> operation) throws SQLException {
+        Connection connection = null;
+        try {
+            connection = getConnection();
+            if (connection == null) {
+                throw new SQLException("Failed to get database connection");
             }
 
-            resultSet.close();
-            statement.close();
-        } catch (SQLException e) {
-            plugin.getLogger().warning("Failed to load achievement cache: " + e.getMessage());
+            // Start transaction
+            connection.setAutoCommit(false);
+            
+            try {
+                // Execute operation
+                T result = operation.execute(connection);
+                
+                // Commit transaction
+                connection.commit();
+                return result;
+            } catch (SQLException e) {
+                // Rollback on error
+                connection.rollback();
+                throw e;
+            }
+        } finally {
+            if (connection != null) {
+                try {
+                    connection.setAutoCommit(true);
+                    connection.close();
+                } catch (SQLException e) {
+                    plugin.getLogger().warning("Error closing connection: " + e.getMessage());
+                }
+            }
         }
+    }
 
-        return cache;
+    /**
+     * Functional interface for database operations
+     * @param <T> The return type of the operation
+     */
+    @FunctionalInterface
+    public interface DatabaseOperation<T> {
+        T execute(Connection connection) throws SQLException;
     }
 }

@@ -1,470 +1,354 @@
 package org.bischofftv.veinminer.listeners;
 
 import org.bischofftv.veinminer.Veinminer;
-import org.bischofftv.veinminer.utils.VeinMiningUtils;
-import org.bukkit.GameMode;
+import org.bischofftv.veinminer.data.PlayerData;
 import org.bukkit.Material;
-import org.bukkit.NamespacedKey;
-import org.bukkit.Registry;
 import org.bukkit.block.Block;
-import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.meta.Damageable;
 
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Set;
-import java.util.Iterator;
-import java.util.Random;
 import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 
 public class BlockBreakListener implements Listener {
 
     private final Veinminer plugin;
-    private final Random random = new Random();
 
     public BlockBreakListener(Veinminer plugin) {
         this.plugin = plugin;
     }
 
-    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onBlockBreak(BlockBreakEvent event) {
         Player player = event.getPlayer();
         Block block = event.getBlock();
 
-        boolean debug = plugin.getConfig().getBoolean("settings.debug", false);
+        // Check if the player has the base permission to use VeinMiner
+        if (!hasVeinMinerPermission(player)) {
+            return;
+        }
 
-        // Debug-Ausgabe hinzufügen
-        boolean isShifting = player.isSneaking();
-        boolean isEnabled = plugin.getPlayerDataManager().isVeinMinerEnabled(player);
-        boolean isAllowedBlock = plugin.getConfigManager().isAllowedBlock(block.getType());
-
-        if (debug) {
-            plugin.debug("[Debug] VeinMiner Check for " + player.getName() + ":");
-            plugin.debug("[Debug] - Is Shifting: " + isShifting);
-            plugin.debug("[Debug] - VeinMiner Enabled: " + isEnabled);
-            plugin.debug("[Debug] - Block Type: " + block.getType().name());
-            plugin.debug("[Debug] - Block Allowed: " + isAllowedBlock);
+        // Get player data
+        PlayerData playerData = plugin.getPlayerDataManager().getPlayerData(player.getUniqueId());
+        if (playerData == null || !playerData.isVeinMinerEnabled()) {
+            return;
         }
 
         // Check if player is sneaking (shift)
-        if (!isShifting) {
-            if (debug) plugin.debug("[Debug] - Player is not sneaking, skipping vein mining");
+        if (!player.isSneaking()) {
             return;
         }
 
-        // Check permission if required
-        if (plugin.getConfig().getBoolean("permissions.require-permission", true)) {
-            String permission = plugin.getConfig().getString("permissions.use-permission", "veinminer.use");
-            if (!player.hasPermission(permission)) {
-                if (debug) {
-                    plugin.debug("[Debug] - Permission Check Failed: " + permission);
+        // Get the tool in the player's hand
+        ItemStack tool = player.getInventory().getItemInMainHand();
+        if (tool == null || tool.getType() == Material.AIR) {
+            return;
+        }
+
+        // Determine tool type
+        String toolType = getToolType(tool.getType());
+        if (toolType == null) {
+            return;
+        }
+
+        // Check if the player has permission for this specific tool
+        if (!hasToolPermission(player, toolType)) {
+            player.sendMessage(plugin.getMessageManager().formatMessage("messages.permission.tool-not-allowed", "%tool%", toolType));
+            return;
+        }
+
+        // Check if the tool is enabled for the player
+        if (!playerData.isToolEnabled(toolType)) {
+            return;
+        }
+
+        // Check if the block is in the allowed blocks list
+        List<String> allowedBlocks = plugin.getConfig().getStringList("allowed-blocks");
+        if (!allowedBlocks.contains(block.getType().toString())) {
+            return;
+        }
+
+        // Check WorldGuard region if enabled
+        if (plugin.getWorldGuardHook() != null && plugin.getWorldGuardHook().isEnabled()) {
+            if (!plugin.getWorldGuardHook().canBreakBlock(player, block.getLocation())) {
+                if (plugin.isDebugMode()) {
+                    plugin.debug("WorldGuard prevented vein mining at " + block.getLocation());
                 }
                 return;
             }
         }
 
-        // Check if veinminer is enabled for this player
-        if (!isEnabled) {
-            if (debug) plugin.debug("[Debug] - VeinMiner is disabled for this player");
-            return;
-        }
-
-        // Check if the block is allowed for vein mining
-        if (!isAllowedBlock) {
-            if (debug) plugin.debug("[Debug] - Block type is not allowed for vein mining: " + block.getType().name());
-            return;
-        }
-
-        // Check if player is in creative mode (no need for tool checks)
-        if (player.getGameMode() == GameMode.CREATIVE) {
-            if (debug) plugin.debug("[Debug] - Player is in creative mode, skipping tool checks");
-            performVeinMining(player, block, null);
-            return;
-        }
-
-        // Get the tool the player is using
-        ItemStack tool = player.getInventory().getItemInMainHand();
-
-        if (debug) {
-            plugin.debug("[Debug] - Player tool: " + (tool != null ? tool.getType().name() : "null"));
-        }
-
-        // Check if the tool is appropriate for the block
-        if (!isAppropriateToolForBlock(tool, block)) {
-            if (debug) {
-                plugin.debug("[Debug] - Tool not appropriate for block: " +
-                        (tool != null ? tool.getType().name() : "null") + " for " + block.getType().name());
-            }
-            return;
-        }
-
-        // Check if veinminer is enabled for this tool type
-        String toolType = getToolType(tool.getType());
-        if (toolType != null && !plugin.getPlayerDataManager().isToolEnabled(player, toolType)) {
-            if (debug) {
-                plugin.debug("[Debug] - Tool type disabled for player: " + toolType);
-            }
-            return;
-        }
-
-        // Perform vein mining
-        if (debug) plugin.debug("[Debug] - All checks passed, performing vein mining");
-        performVeinMining(player, block, tool);
-    }
-
-    private void performVeinMining(Player player, Block startBlock, ItemStack tool) {
-        boolean debug = plugin.getConfig().getBoolean("settings.debug", false);
-
-        if (debug) {
-            plugin.debug("[Debug] Starting vein mining for " + player.getName());
-            plugin.debug("[Debug] Start block: " + startBlock.getType().name());
-            plugin.debug("[Debug] Tool: " + (tool != null ? tool.getType().name() : "null"));
-        }
-
-        // Get max blocks based on player level or config
+        // Get max blocks for player's level
         int maxBlocks = plugin.getLevelManager().isEnabled()
-                ? plugin.getLevelManager().getMaxBlocks(player)
-                : plugin.getConfigManager().getMaxBlocks();
+                ? plugin.getLevelManager().getMaxBlocksForLevel(playerData.getLevel())
+                : plugin.getConfig().getInt("settings.max-blocks", 64);
 
-        if (debug) {
-            plugin.debug("[Debug] Max blocks allowed: " + maxBlocks);
-        }
+        // Start vein mining
+        Material targetMaterial = block.getType();
+        Set<Block> blocksToBreak = new HashSet<>();
+        Set<Block> checkedBlocks = new HashSet<>();
 
-        // Get allowed blocks from config
-        Set<Material> allowedBlocks = plugin.getConfigManager().getAllowedBlocks();
-        if (debug) {
-            plugin.debug("[Debug] Allowed blocks count: " + allowedBlocks.size());
-            plugin.debug("[Debug] Checking if " + startBlock.getType().name() + " is in allowed blocks: " +
-                    allowedBlocks.contains(startBlock.getType()));
-        }
+        // Add the initial block
+        blocksToBreak.add(block);
 
-        // Get connected blocks of the same type
-        Collection<Block> connectedBlocks = VeinMiningUtils.findConnectedBlocks(
-                startBlock,
-                maxBlocks,
-                allowedBlocks
-        );
+        // Find connected blocks of the same type
+        findConnectedBlocks(block, targetMaterial, blocksToBreak, checkedBlocks, maxBlocks);
 
-        if (debug) {
-            plugin.debug("[Debug] Found " + connectedBlocks.size() + " connected blocks");
-        }
+        // Remove the original block as it's already being broken by the event
+        blocksToBreak.remove(block);
 
-        // Skip if only the original block was found
-        if (connectedBlocks.size() <= 1) {
-            if (debug) {
-                plugin.debug("[Debug] Not enough connected blocks found, skipping vein mining");
-            }
-            return;
-        }
-
-        // Check WorldGuard protection for each block
-        if (plugin.getWorldGuardHook() != null && plugin.getWorldGuardHook().isEnabled()) {
-            // Create a copy of the collection to avoid ConcurrentModificationException
-            Iterator<Block> iterator = connectedBlocks.iterator();
-
-            // Skip the first block (startBlock) as it's already been checked by the event
-            if (iterator.hasNext() && iterator.next().equals(startBlock)) {
-                // Do nothing, just skip the first block
+        if (!blocksToBreak.isEmpty()) {
+            // Apply durability and hunger costs
+            if (!applyToolDurability(player, tool, blocksToBreak.size(), playerData)) {
+                return; // Tool broke
             }
 
-            // Check the rest of the blocks
-            while (iterator.hasNext()) {
-                Block block = iterator.next();
+            applyHungerCost(player, blocksToBreak.size(), playerData);
 
-                // Remove blocks that can't be broken due to WorldGuard protection
-                if (!plugin.getWorldGuardHook().canBreak(player, block)) {
-                    iterator.remove();
+            // Break the blocks
+            for (Block blockToBreak : blocksToBreak) {
+                // Skip if block type changed (e.g., by another plugin)
+                if (blockToBreak.getType() != targetMaterial) {
+                    continue;
+                }
 
-                    if (debug) {
-                        plugin.debug("[Debug] Block at " + block.getLocation() + " removed due to WorldGuard protection");
+                // Break the block and drop items
+                blockToBreak.breakNaturally(tool);
+
+                // Apply luck enhancement for bonus drops
+                if (plugin.getSkillManager().isEnabled()) {
+                    int luckLevel = playerData.getLuckLevel();
+                    double luckChance = plugin.getSkillManager().getLuckEnhancement(luckLevel);
+
+                    if (Math.random() * 100 < luckChance) {
+                        // Drop an extra item
+                        blockToBreak.getWorld().dropItemNaturally(blockToBreak.getLocation(),
+                                new ItemStack(targetMaterial, 1));
                     }
                 }
             }
 
-            if (debug) {
-                plugin.debug("[Debug] After WorldGuard check: " + connectedBlocks.size() + " blocks remaining");
+            // Update player stats
+            int totalBlocksMined = blocksToBreak.size() + 1; // +1 for the original block
+            plugin.getLevelManager().addBlocksMined(player, totalBlocksMined);
+
+            // Update achievements
+            if (plugin.getAchievementManager().isEnabled()) {
+                plugin.getAchievementManager().updateBlockMineAchievements(player, targetMaterial.toString(), totalBlocksMined);
             }
 
-            // Skip if only the original block is left after WorldGuard checks
-            if (connectedBlocks.size() <= 1) {
-                if (debug) {
-                    plugin.debug("[Debug] Not enough blocks left after WorldGuard check, skipping vein mining");
-                }
-                return;
+            // Debug message
+            if (plugin.isDebugMode()) {
+                plugin.debug("Player " + player.getName() + " vein mined " + totalBlocksMined + " blocks of " + targetMaterial);
             }
         }
+    }
 
-        // Track mining statistics for logging
-        int blocksDestroyed = 0;
-        Map<Material, Integer> itemsCollected = new HashMap<>();
-        Map<Material, Integer> blocksMined = new HashMap<>(); // Track blocks by type for achievements
+    /**
+     * Find connected blocks of the same type
+     * @param startBlock The starting block
+     * @param material The material to match
+     * @param blocksToBreak Set of blocks to break
+     * @param checkedBlocks Set of blocks already checked
+     * @param maxBlocks Maximum number of blocks to find
+     */
+    private void findConnectedBlocks(Block startBlock, Material material, Set<Block> blocksToBreak, Set<Block> checkedBlocks, int maxBlocks) {
+        // Stop if we've reached the maximum number of blocks
+        if (blocksToBreak.size() >= maxBlocks) {
+            return;
+        }
 
-        // Get enchantments from tool
-        Map<Enchantment, Integer> enchantments = tool != null ? tool.getEnchantments() : new HashMap<>();
+        // Check adjacent blocks (including diagonals)
+        for (int x = -1; x <= 1; x++) {
+            for (int y = -1; y <= 1; y++) {
+                for (int z = -1; z <= 1; z++) {
+                    // Skip the center block
+                    if (x == 0 && y == 0 && z == 0) {
+                        continue;
+                    }
 
-        // Use Registry to get enchantments
-        Enchantment silkTouchEnchant = Registry.ENCHANTMENT.get(NamespacedKey.minecraft("silk_touch"));
-        Enchantment fortuneEnchant = Registry.ENCHANTMENT.get(NamespacedKey.minecraft("fortune"));
+                    Block adjacentBlock = startBlock.getRelative(x, y, z);
 
-        boolean hasSilkTouch = tool != null && tool.getEnchantmentLevel(silkTouchEnchant) > 0;
-        int fortuneLevel = tool != null ? tool.getEnchantmentLevel(fortuneEnchant) : 0;
+                    // Skip if already checked
+                    if (checkedBlocks.contains(adjacentBlock)) {
+                        continue;
+                    }
 
-        // Process each connected block
-        for (Block block : connectedBlocks) {
-            // Skip the original block as it's handled by the normal event
-            if (block.equals(startBlock)) {
-                continue;
-            }
+                    checkedBlocks.add(adjacentBlock);
 
-            try {
-                // Track block type for achievements
-                Material blockType = block.getType();
-                blocksMined.merge(blockType, 1, Integer::sum);
+                    // Check if it's the same material
+                    if (adjacentBlock.getType() == material) {
+                        blocksToBreak.add(adjacentBlock);
 
-                // Break the block and collect drops
-                Collection<ItemStack> drops;
-                if (hasSilkTouch) {
-                    drops = VeinMiningUtils.getSilkTouchDrops(block);
-                } else {
-                    drops = VeinMiningUtils.getFortuneDrops(block, fortuneLevel);
-
-                    // Apply luck enhancement skill if enabled
-                    if (plugin.getSkillManager() != null && plugin.getSkillManager().isEnabled() &&
-                            plugin.getSkillManager().shouldGetLuckEnhancement(player)) {
-                        // Add extra drops based on luck enhancement
-                        for (ItemStack drop : new ArrayList<>(drops)) {
-                            ItemStack extraDrop = drop.clone();
-                            extraDrop.setAmount(1); // Just add one extra item
-                            drops.add(extraDrop);
-
-                            if (debug) {
-                                plugin.debug("[Debug] Luck Enhancement applied for " + player.getName() +
-                                        " - Added extra " + extraDrop.getType().name());
-                            }
+                        // Recursively check adjacent blocks
+                        if (blocksToBreak.size() < maxBlocks) {
+                            findConnectedBlocks(adjacentBlock, material, blocksToBreak, checkedBlocks, maxBlocks);
                         }
                     }
                 }
-
-                // Add drops to player's inventory
-                for (ItemStack drop : drops) {
-                    // Track items for logging
-                    itemsCollected.merge(drop.getType(), drop.getAmount(), Integer::sum);
-
-                    // Add to player's inventory or drop on ground if inventory is full
-                    HashMap<Integer, ItemStack> leftover = player.getInventory().addItem(drop);
-                    for (ItemStack item : leftover.values()) {
-                        player.getWorld().dropItemNaturally(block.getLocation(), item);
-                    }
-                }
-
-                // Set the block to air
-                block.setType(Material.AIR);
-                blocksDestroyed++;
-
-                if (debug) {
-                    plugin.debug("[Debug] Successfully mined block: " + blockType.name());
-                }
-            } catch (Exception e) {
-                plugin.getLogger().warning("Error while processing block during vein mining: " + e.getMessage());
-                if (debug) {
-                    e.printStackTrace();
-                }
             }
-        }
-
-        // Apply tool damage if not in creative mode
-        if (player.getGameMode() != GameMode.CREATIVE && tool != null) {
-            applyToolDamage(player, tool, blocksDestroyed);
-        }
-
-        // Apply hunger if configured
-        if (plugin.getConfigManager().isUseHungerMultiplier()) {
-            applyHunger(player, blocksDestroyed);
-        }
-
-        // Update player level data
-        if (plugin.getLevelManager().isEnabled()) {
-            plugin.getLevelManager().addBlocksMined(player, blocksDestroyed);
-        }
-
-        // Update achievements for each block type mined
-        if (plugin.getAchievementManager().isEnabled()) {
-            // Update total blocks mined achievement
-            plugin.getAchievementManager().updateTotalBlocksProgress(player, blocksDestroyed);
-
-            // Update block-specific achievements
-            for (Map.Entry<Material, Integer> entry : blocksMined.entrySet()) {
-                plugin.getAchievementManager().updateBlockMineProgress(player, entry.getKey(), entry.getValue());
-
-                if (debug) {
-                    plugin.debug("[Debug] Updating achievement progress for " + player.getName() +
-                            " - Block: " + entry.getKey().name() + ", Amount: " + entry.getValue());
-                }
-            }
-
-            // Wichtig: Sofort speichern, um Datenverlust zu vermeiden
-            plugin.getAchievementManager().savePlayerAchievements(player);
-
-            // Erzwinge Synchronisierung mit anderen Servern
-            plugin.forceSyncDataNow();
-        }
-
-        // Log mining activity
-        plugin.getMiningLogger().logMiningActivity(player, blocksDestroyed, itemsCollected, enchantments);
-
-        // Update bStats counter
-        if (plugin.getVeinMinerUtils() != null) {
-            plugin.getVeinMinerUtils().incrementBlocksMined(blocksDestroyed);
-        }
-
-        if (debug) {
-            plugin.debug("[Debug] Vein mining completed for " + player.getName() +
-                    ". Blocks destroyed: " + blocksDestroyed);
         }
     }
 
-    private void applyToolDamage(Player player, ItemStack tool, int blocksDestroyed) {
-        if (!(tool.getItemMeta() instanceof Damageable)) {
+    /**
+     * Apply durability cost to the tool
+     * @param player The player
+     * @param tool The tool
+     * @param blockCount Number of blocks broken
+     * @param playerData The player data
+     * @return True if the tool survived, false if it broke
+     */
+    private boolean applyToolDurability(Player player, ItemStack tool, int blockCount, PlayerData playerData) {
+        if (!plugin.getConfig().getBoolean("settings.use-durability-multiplier", true)) {
+            return true;
+        }
+
+        // Skip if tool has infinite durability
+        if (tool.getType().getMaxDurability() == 0 || tool.getItemMeta().isUnbreakable()) {
+            return true;
+        }
+
+        // Calculate durability cost
+        double multiplier = plugin.getConfig().getDouble("settings.durability-multiplier", 1.0);
+        int durabilityLoss = (int) Math.ceil(blockCount * multiplier);
+
+        // Apply efficiency boost to reduce durability loss
+        if (plugin.getSkillManager().isEnabled()) {
+            int efficiencyLevel = playerData.getEfficiencyLevel();
+            double efficiencyChance = plugin.getSkillManager().getEfficiencyBoost(efficiencyLevel);
+
+            // For each block, check if efficiency applies
+            int blocksReduced = 0;
+            for (int i = 0; i < blockCount; i++) {
+                if (Math.random() * 100 < efficiencyChance) {
+                    blocksReduced++;
+                }
+            }
+
+            // Reduce durability loss
+            durabilityLoss -= blocksReduced;
+            if (durabilityLoss < 0) durabilityLoss = 0;
+        }
+
+        // Get current durability
+        short maxDurability = tool.getType().getMaxDurability();
+        short currentDurability = tool.getDurability();
+
+        // Calculate new durability
+        short newDurability = (short) (currentDurability + durabilityLoss);
+
+        // Check if tool will break
+        if (newDurability >= maxDurability) {
+            // Tool breaks
+            player.getInventory().setItemInMainHand(null);
+            player.playSound(player.getLocation(), org.bukkit.Sound.ENTITY_ITEM_BREAK, 1.0f, 1.0f);
+            return false;
+        } else {
+            // Apply durability
+            tool.setDurability(newDurability);
+            return true;
+        }
+    }
+
+    /**
+     * Apply hunger cost to the player
+     * @param player The player
+     * @param blockCount Number of blocks broken
+     * @param playerData The player data
+     */
+    private void applyHungerCost(Player player, int blockCount, PlayerData playerData) {
+        if (!plugin.getConfig().getBoolean("settings.use-hunger-multiplier", true)) {
             return;
         }
 
-        // Calculate damage to apply
-        int damage = blocksDestroyed;
-        if (plugin.getConfigManager().isUseDurabilityMultiplier()) {
-            damage = (int) Math.ceil(damage * plugin.getConfigManager().getDurabilityMultiplier());
-        }
+        // Calculate hunger cost
+        double multiplier = plugin.getConfig().getDouble("settings.hunger-multiplier", 0.1);
+        float hungerLoss = (float) (blockCount * multiplier);
 
-        // Apply efficiency boost skill if enabled
-        if (plugin.getSkillManager() != null && plugin.getSkillManager().isEnabled() &&
-                plugin.getSkillManager().shouldGetEfficiencyBoost(player)) {
-            // Reduce damage based on efficiency boost
-            damage = (int) Math.ceil(damage * 0.5); // Reduce damage by 50%
+        // Apply energy conservation to reduce hunger loss
+        if (plugin.getSkillManager().isEnabled()) {
+            int energyLevel = playerData.getEnergyLevel();
+            double energyChance = plugin.getSkillManager().getEnergyConservation(energyLevel);
 
-            if (plugin.isDebugMode()) {
-                plugin.debug("[Debug] Efficiency Boost applied for " + player.getName() +
-                        " - Reduced durability damage from " + blocksDestroyed + " to " + damage);
+            // For each block, check if energy conservation applies
+            int blocksReduced = 0;
+            for (int i = 0; i < blockCount; i++) {
+                if (Math.random() * 100 < energyChance) {
+                    blocksReduced++;
+                }
             }
+
+            // Reduce hunger loss
+            hungerLoss -= (float) (blocksReduced * multiplier);
+            if (hungerLoss < 0) hungerLoss = 0;
         }
 
-        // Apply unbreaking enchantment reduction
-        Enchantment unbreakingEnchant = Registry.ENCHANTMENT.get(NamespacedKey.minecraft("unbreaking"));
-        int unbreakingLevel = tool.getEnchantmentLevel(unbreakingEnchant);
-
-        if (unbreakingLevel > 0) {
-            double reduction = 1.0 / (unbreakingLevel + 1);
-            damage = (int) Math.ceil(damage * reduction);
-        }
-
-        // Apply damage to tool
-        Damageable meta = (Damageable) tool.getItemMeta();
-        int currentDurability = meta.getDamage();
-        int newDurability = currentDurability + damage;
-
-        // Check if tool should break
-        if (newDurability >= tool.getType().getMaxDurability()) {
-            player.getInventory().setItemInMainHand(null);
-            player.playSound(player.getLocation(), "entity.item.break", 1.0f, 1.0f);
-        } else {
-            meta.setDamage(newDurability);
-            tool.setItemMeta(meta);
-        }
-    }
-
-    private void applyHunger(Player player, int blocksDestroyed) {
-        double hungerToApply = blocksDestroyed * plugin.getConfigManager().getHungerMultiplier();
-
-        // Apply energy conservation skill if enabled
-        if (plugin.getSkillManager() != null && plugin.getSkillManager().isEnabled() &&
-                plugin.getSkillManager().shouldGetEnergyConservation(player)) {
-            // Reduce hunger based on energy conservation
-            hungerToApply = hungerToApply * 0.5; // Reduce hunger by 50%
-
-            if (plugin.isDebugMode()) {
-                plugin.debug("[Debug] Energy Conservation applied for " + player.getName() +
-                        " - Reduced hunger from " + (blocksDestroyed * plugin.getConfigManager().getHungerMultiplier()) +
-                        " to " + hungerToApply);
-            }
-        }
-
+        // Get current food level
         int foodLevel = player.getFoodLevel();
-        int newFoodLevel = Math.max(0, (int) (foodLevel - hungerToApply));
-        player.setFoodLevel(newFoodLevel);
-    }
+        float saturation = player.getSaturation();
 
-    private boolean isAppropriateToolForBlock(ItemStack tool, Block block) {
-        boolean debug = plugin.getConfig().getBoolean("settings.debug", false);
+        // First reduce saturation
+        if (saturation > hungerLoss) {
+            player.setSaturation(saturation - hungerLoss);
+        } else {
+            // Then reduce food level
+            hungerLoss -= saturation;
+            player.setSaturation(0);
 
-        if (tool == null || tool.getType() == Material.AIR) {
-            if (debug) {
-                plugin.debug("[Debug] Tool is null or AIR");
+            if (hungerLoss > 0) {
+                int newFoodLevel = Math.max(0, foodLevel - (int) Math.ceil(hungerLoss));
+                player.setFoodLevel(newFoodLevel);
             }
-            return false;
         }
-
-        Material toolType = tool.getType();
-        Material blockType = block.getType();
-
-        if (debug) {
-            plugin.debug("[Debug] Checking tool compatibility: " + toolType.name() + " for " + blockType.name());
-        }
-
-        // Example check for ores and pickaxes
-        if (blockType.name().contains("ORE") || blockType == Material.STONE ||
-                blockType.name().contains("DEEPSLATE") || blockType.name().contains("COPPER") ||
-                blockType.name().contains("IRON") || blockType.name().contains("GOLD") ||
-                blockType.name().contains("DIAMOND") || blockType.name().contains("EMERALD") ||
-                blockType.name().contains("LAPIS") || blockType.name().contains("REDSTONE") ||
-                blockType.name().contains("QUARTZ") || blockType.name().contains("DEBRIS")) {
-            return toolType.name().contains("PICKAXE");
-        }
-
-        // Example check for wood and axes
-        if (blockType.name().contains("LOG") || blockType.name().contains("WOOD") ||
-                blockType.name().contains("STEM") || blockType.name().contains("HYPHAE") ||
-                blockType.name().contains("PLANKS")) {
-            return toolType.name().contains("AXE");
-        }
-
-        // Example check for dirt, sand, gravel and shovels
-        if (blockType == Material.DIRT || blockType == Material.SAND ||
-                blockType == Material.GRAVEL || blockType == Material.CLAY ||
-                blockType == Material.SOUL_SAND || blockType == Material.SOUL_SOIL ||
-                blockType.name().contains("POWDER") || blockType.name().contains("SNOW")) {
-            return toolType.name().contains("SHOVEL");
-        }
-
-        // Check for crops and hoes
-        if (blockType.name().contains("CROP") || blockType == Material.WHEAT ||
-                blockType == Material.CARROTS || blockType == Material.POTATOES ||
-                blockType == Material.BEETROOTS || blockType == Material.NETHER_WART ||
-                blockType == Material.MELON || blockType == Material.PUMPKIN) {
-            return toolType.name().contains("HOE");
-        }
-
-        if (debug) {
-            plugin.debug("[Debug] Block type not recognized for tool matching: " + blockType.name());
-        }
-
-        return false;
     }
 
-    private String getToolType(Material material) {
-        if (material == null) {
-            return null;
+    /**
+     * Check if a player has the base permission to use VeinMiner
+     * @param player The player to check
+     * @return True if the player has permission, false otherwise
+     */
+    private boolean hasVeinMinerPermission(Player player) {
+        return plugin.hasPermission(player, "veinminer.use");
+    }
+
+    /**
+     * Check if a player has permission to use a specific tool with VeinMiner
+     * @param player The player to check
+     * @param toolType The tool type (pickaxe, axe, shovel, hoe)
+     * @return True if the player has permission, false otherwise
+     */
+    private boolean hasToolPermission(Player player, String toolType) {
+        if (!plugin.getConfig().getBoolean("permissions.require-tool-permission", true)) {
+            return true;
         }
 
-        String name = material.name();
-        if (name.contains("PICKAXE")) return "pickaxe";
-        if (name.contains("AXE") && !name.contains("PICKAXE")) return "axe";
-        if (name.contains("SHOVEL")) return "shovel";
-        if (name.contains("HOE")) return "hoe";
+        return plugin.hasPermission(player, "veinminer.tool." + toolType);
+    }
+
+    /**
+     * Get the tool type from a material
+     * @param material The material
+     * @return The tool type, or null if not a valid tool
+     */
+    private String getToolType(Material material) {
+        String name = material.toString().toLowerCase();
+
+        if (name.contains("pickaxe")) {
+            return "pickaxe";
+        } else if (name.contains("axe") && !name.contains("pickaxe")) {
+            return "axe";
+        } else if (name.contains("shovel") || name.contains("spade")) {
+            return "shovel";
+        } else if (name.contains("hoe")) {
+            return "hoe";
+        }
+
         return null;
     }
 }

@@ -3,11 +3,11 @@ package org.bischofftv.veinminer.listeners;
 import org.bischofftv.veinminer.Veinminer;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
-
-import java.util.Map;
+import org.bukkit.scheduler.BukkitRunnable;
 
 public class PlayerListener implements Listener {
 
@@ -17,43 +17,69 @@ public class PlayerListener implements Listener {
         this.plugin = plugin;
     }
 
-    @EventHandler
+    @EventHandler(priority = EventPriority.NORMAL)
     public void onPlayerJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
 
-        // Load player data
-        plugin.getPlayerDataManager().loadPlayerData(player);
+        // Load player data with a slight delay to ensure everything is ready
+        new BukkitRunnable() {
+            @Override
+            public void run() {
+                if (player.isOnline()) {
+                    // Load player data
+                    plugin.getPlayerDataManager().loadPlayerData(player);
 
-        // Load player achievements if achievement system is enabled
-        if (plugin.getAchievementManager().isEnabled()) {
-            plugin.getAchievementManager().loadPlayerAchievements(player);
+                    // Load achievements if enabled
+                    if (plugin.getAchievementManager().isEnabled()) {
+                        plugin.getAchievementManager().loadPlayerAchievements(player);
+                    }
 
-            // Check for level achievements
-            if (plugin.getLevelManager().isEnabled()) {
-                int level = plugin.getPlayerDataManager().getPlayerData(player.getUniqueId()).getLevel();
-                plugin.getAchievementManager().updateLevelProgress(player, level);
+                    // Debug log
+                    if (plugin.isDebugMode()) {
+                        plugin.debug("Loaded data for player " + player.getName());
+                    }
+                }
             }
+        }.runTaskLater(plugin, 10L); // 0.5 second delay
 
-            // Check for skill master achievement
-            if (plugin.getSkillManager().isEnabled()) {
-                plugin.getAchievementManager().updateSkillMasterProgress(player);
-            }
+        // Check for updates if player has permission
+        if (plugin.getUpdateChecker() != null && player.hasPermission("veinminer.admin")) {
+            new BukkitRunnable() {
+                @Override
+                public void run() {
+                    if (player.isOnline()) {
+                        plugin.getUpdateChecker().checkForUpdates();
+
+                        // If there's an update, notify the player
+                        if (plugin.getUpdateChecker().isUpdateAvailable()) {
+                            player.sendMessage(plugin.getMessageManager().formatMessage("messages.update.available",
+                                    "%current%", plugin.getDescription().getVersion(),
+                                    "%latest%", plugin.getUpdateChecker().getLatestVersion()));
+                        }
+                    }
+                }
+            }.runTaskLaterAsynchronously(plugin, 60L); // 3 second delay
         }
     }
 
-    @EventHandler
+    @EventHandler(priority = EventPriority.NORMAL)
     public void onPlayerQuit(PlayerQuitEvent event) {
         Player player = event.getPlayer();
 
         // Save player data
-        plugin.getPlayerDataManager().savePlayerData(player);
+        plugin.getPlayerDataManager().savePlayerData(player.getUniqueId());
 
-        // Save player achievements if achievement system is enabled
+        // Save achievements if enabled
         if (plugin.getAchievementManager().isEnabled()) {
-            plugin.getAchievementManager().savePlayerAchievements(player);
+            plugin.getAchievementManager().savePlayerAchievements(player.getUniqueId());
         }
 
-        // Unload player data
-        plugin.getPlayerDataManager().unloadPlayerData(player);
+        // Remove player data from memory
+        plugin.getPlayerDataManager().removePlayerData(player.getUniqueId());
+
+        // Debug log
+        if (plugin.isDebugMode()) {
+            plugin.debug("Saved and removed data for player " + player.getName());
+        }
     }
 }

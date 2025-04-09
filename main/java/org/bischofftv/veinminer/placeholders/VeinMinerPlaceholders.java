@@ -15,6 +15,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class VeinMinerPlaceholders extends PlaceholderExpansion {
 
@@ -24,6 +25,11 @@ public class VeinMinerPlaceholders extends PlaceholderExpansion {
     private Map<String, List<TopPlayerData>> topPlayersCache = new HashMap<>();
     private long lastCacheUpdate = 0;
     private static final long CACHE_DURATION = 5 * 60 * 1000; // 5 minutes in milliseconds
+
+    // Cache for placeholder results to avoid excessive logging and database queries
+    private Map<String, String> placeholderResultCache = new ConcurrentHashMap<>();
+    private long lastPlaceholderCacheUpdate = 0;
+    private static final long PLACEHOLDER_CACHE_DURATION = 30 * 1000; // 30 seconds
 
     public VeinMinerPlaceholders(Veinminer plugin) {
         this.plugin = plugin;
@@ -58,83 +64,100 @@ public class VeinMinerPlaceholders extends PlaceholderExpansion {
 
     @Override
     public String onRequest(OfflinePlayer player, String identifier) {
-        plugin.getLogger().info("PlaceholderAPI request: " + identifier + " for player: " + (player != null ? player.getName() : "null"));
+        // Check if we have this placeholder in cache
+        String cacheKey = (player != null ? player.getUniqueId().toString() : "null") + ":" + identifier;
+
+        // Return from cache if available and not expired
+        if (placeholderResultCache.containsKey(cacheKey) &&
+                System.currentTimeMillis() - lastPlaceholderCacheUpdate < PLACEHOLDER_CACHE_DURATION) {
+            return placeholderResultCache.get(cacheKey);
+        }
+
+        // Only log once per cache refresh to avoid spam
+        if (System.currentTimeMillis() - lastPlaceholderCacheUpdate > PLACEHOLDER_CACHE_DURATION) {
+            plugin.debug("PlaceholderAPI request: " + identifier + " for player: " + (player != null ? player.getName() : "null"));
+        }
 
         // Check if cache needs to be refreshed
         if (System.currentTimeMillis() - lastCacheUpdate > CACHE_DURATION) {
             refreshCache();
         }
 
+        String result = null;
+
         // Player-specific placeholders
         if (player != null) {
             // Player level
             if (identifier.equals("level")) {
                 if (!plugin.getLevelManager().isEnabled()) {
-                    return "Disabled";
-                }
-                try {
-                    return String.valueOf(plugin.getPlayerDataManager().getPlayerData(player.getUniqueId()).getLevel());
-                } catch (Exception e) {
-                    plugin.getLogger().warning("Error getting level for " + player.getName() + ": " + e.getMessage());
-                    return "Error";
+                    result = "Disabled";
+                } else {
+                    try {
+                        result = String.valueOf(plugin.getPlayerDataManager().getPlayerData(player.getUniqueId()).getLevel());
+                    } catch (Exception e) {
+                        plugin.getLogger().warning("Error getting level for " + player.getName() + ": " + e.getMessage());
+                        result = "Error";
+                    }
                 }
             }
 
             // Player experience
-            if (identifier.equals("experience")) {
+            else if (identifier.equals("experience")) {
                 if (!plugin.getLevelManager().isEnabled()) {
-                    return "Disabled";
-                }
-                try {
-                    return String.valueOf(plugin.getPlayerDataManager().getPlayerData(player.getUniqueId()).getExperience());
-                } catch (Exception e) {
-                    plugin.getLogger().warning("Error getting experience for " + player.getName() + ": " + e.getMessage());
-                    return "Error";
+                    result = "Disabled";
+                } else {
+                    try {
+                        result = String.valueOf(plugin.getPlayerDataManager().getPlayerData(player.getUniqueId()).getExperience());
+                    } catch (Exception e) {
+                        plugin.getLogger().warning("Error getting experience for " + player.getName() + ": " + e.getMessage());
+                        result = "Error";
+                    }
                 }
             }
 
             // Player blocks mined
-            if (identifier.equals("blocks_mined")) {
+            else if (identifier.equals("blocks_mined")) {
                 if (!plugin.getLevelManager().isEnabled()) {
-                    return "Disabled";
-                }
-                try {
-                    return String.valueOf(plugin.getPlayerDataManager().getPlayerData(player.getUniqueId()).getBlocksMined());
-                } catch (Exception e) {
-                    plugin.getLogger().warning("Error getting blocks mined for " + player.getName() + ": " + e.getMessage());
-                    return "Error";
+                    result = "Disabled";
+                } else {
+                    try {
+                        result = String.valueOf(plugin.getPlayerDataManager().getPlayerData(player.getUniqueId()).getBlocksMined());
+                    } catch (Exception e) {
+                        plugin.getLogger().warning("Error getting blocks mined for " + player.getName() + ": " + e.getMessage());
+                        result = "Error";
+                    }
                 }
             }
 
             // Player achievements completed
-            if (identifier.equals("achievements_completed")) {
+            else if (identifier.equals("achievements_completed")) {
                 if (!plugin.getAchievementManager().isEnabled()) {
-                    return "Disabled";
-                }
+                    result = "Disabled";
+                } else {
+                    try {
+                        int completed = 0;
+                        Player onlinePlayer = player.getPlayer();
+                        if (onlinePlayer != null) {
+                            Map<String, Integer> achievements = plugin.getAchievementManager().getPlayerAchievements(onlinePlayer);
+                            Map<String, Map<String, Object>> definitions = plugin.getAchievementManager().getAchievementDefinitions();
 
-                try {
-                    int completed = 0;
-                    Player onlinePlayer = player.getPlayer();
-                    if (onlinePlayer != null) {
-                        Map<String, Integer> achievements = plugin.getAchievementManager().getPlayerAchievements(onlinePlayer);
-                        Map<String, Map<String, Object>> definitions = plugin.getAchievementManager().getAchievementDefinitions();
+                            for (Map.Entry<String, Integer> entry : achievements.entrySet()) {
+                                String achievementId = entry.getKey();
+                                int progress = entry.getValue();
 
-                        for (Map.Entry<String, Integer> entry : achievements.entrySet()) {
-                            String achievementId = entry.getKey();
-                            int progress = entry.getValue();
-
-                            if (definitions.containsKey(achievementId)) {
-                                int requiredAmount = (int) definitions.get(achievementId).get("amount");
-                                if (progress >= requiredAmount) {
-                                    completed++;
+                                if (definitions.containsKey(achievementId)) {
+                                    int requiredAmount = (int) definitions.get(achievementId).get("amount");
+                                    if (progress >= requiredAmount) {
+                                        completed++;
+                                    }
                                 }
                             }
                         }
+                        result = String.valueOf(completed);
+                    } catch (Exception e) {
+                        plugin.getLogger().warning("Error getting achievements for " + player.getName() + ": " + e.getMessage());
+                        result = "Error";
                     }
-                    return String.valueOf(completed);
-                } catch (Exception e) {
-                    plugin.getLogger().warning("Error getting achievements for " + player.getName() + ": " + e.getMessage());
-                    return "Error";
                 }
             }
         }
@@ -144,72 +167,77 @@ public class VeinMinerPlaceholders extends PlaceholderExpansion {
             try {
                 int position = Integer.parseInt(identifier.substring("top_level_".length()));
                 if (position < 1 || position > 10) {
-                    return "Invalid position";
-                }
-
-                List<TopPlayerData> topLevelPlayers = topPlayersCache.getOrDefault("level", new ArrayList<>());
-                if (position <= topLevelPlayers.size()) {
-                    TopPlayerData playerData = topLevelPlayers.get(position - 1);
-                    return playerData.getPlayerName() + ": " + playerData.getValue();
+                    result = "Invalid position";
                 } else {
-                    return "N/A";
+                    List<TopPlayerData> topLevelPlayers = topPlayersCache.getOrDefault("level", new ArrayList<>());
+                    if (position <= topLevelPlayers.size()) {
+                        TopPlayerData playerData = topLevelPlayers.get(position - 1);
+                        result = playerData.getPlayerName() + ": " + playerData.getValue();
+                    } else {
+                        result = "N/A";
+                    }
                 }
             } catch (NumberFormatException e) {
-                return "Invalid format";
+                result = "Invalid format";
             }
         }
 
         // Top players by achievements
-        if (identifier.startsWith("top_achievements_")) {
+        else if (identifier.startsWith("top_achievements_")) {
             try {
                 int position = Integer.parseInt(identifier.substring("top_achievements_".length()));
                 if (position < 1 || position > 10) {
-                    return "Invalid position";
-                }
-
-                List<TopPlayerData> topAchievementPlayers = topPlayersCache.getOrDefault("achievements", new ArrayList<>());
-                if (position <= topAchievementPlayers.size()) {
-                    TopPlayerData playerData = topAchievementPlayers.get(position - 1);
-                    return playerData.getPlayerName() + ": " + playerData.getValue();
+                    result = "Invalid position";
                 } else {
-                    return "N/A";
+                    List<TopPlayerData> topAchievementPlayers = topPlayersCache.getOrDefault("achievements", new ArrayList<>());
+                    if (position <= topAchievementPlayers.size()) {
+                        TopPlayerData playerData = topAchievementPlayers.get(position - 1);
+                        result = playerData.getPlayerName() + ": " + playerData.getValue();
+                    } else {
+                        result = "N/A";
+                    }
                 }
             } catch (NumberFormatException e) {
-                return "Invalid format";
+                result = "Invalid format";
             }
         }
 
         // Top players by blocks mined
-        if (identifier.startsWith("top_blocks_")) {
+        else if (identifier.startsWith("top_blocks_")) {
             try {
                 int position = Integer.parseInt(identifier.substring("top_blocks_".length()));
                 if (position < 1 || position > 10) {
-                    return "Invalid position";
-                }
-
-                List<TopPlayerData> topBlocksPlayers = topPlayersCache.getOrDefault("blocks", new ArrayList<>());
-                if (position <= topBlocksPlayers.size()) {
-                    TopPlayerData playerData = topBlocksPlayers.get(position - 1);
-                    return playerData.getPlayerName() + ": " + playerData.getValue();
+                    result = "Invalid position";
                 } else {
-                    return "N/A";
+                    List<TopPlayerData> topBlocksPlayers = topPlayersCache.getOrDefault("blocks", new ArrayList<>());
+                    if (position <= topBlocksPlayers.size()) {
+                        TopPlayerData playerData = topBlocksPlayers.get(position - 1);
+                        result = playerData.getPlayerName() + ": " + playerData.getValue();
+                    } else {
+                        result = "N/A";
+                    }
                 }
             } catch (NumberFormatException e) {
-                return "Invalid format";
+                result = "Invalid format";
             }
         }
 
-        return null; // Placeholder not found
+        // Cache the result
+        if (result != null) {
+            placeholderResultCache.put(cacheKey, result);
+        }
+
+        return result;
     }
 
     /**
      * Refresh the cache of top players
      */
     public void refreshCache() {
-        plugin.getLogger().info("Refreshing PlaceholderAPI cache...");
+        plugin.debug("Refreshing PlaceholderAPI cache...");
 
         if (plugin.getDatabaseManager() == null || !plugin.getDatabaseManager().checkConnection()) {
-            plugin.getLogger().warning("Cannot refresh cache: Database connection is not available");
+            plugin.debug("Cannot refresh cache: Database connection is not available");
             return;
         }
 
@@ -228,7 +256,12 @@ public class VeinMinerPlaceholders extends PlaceholderExpansion {
         // Update cache timestamp
         lastCacheUpdate = System.currentTimeMillis();
 
-        plugin.getLogger().info("PlaceholderAPI cache refreshed successfully");
+        // Also update placeholder cache timestamp
+        lastPlaceholderCacheUpdate = System.currentTimeMillis();
+        // Clear placeholder cache
+        placeholderResultCache.clear();
+
+        plugin.debug("PlaceholderAPI cache refreshed successfully");
     }
 
     /**
@@ -238,29 +271,32 @@ public class VeinMinerPlaceholders extends PlaceholderExpansion {
      */
     private List<TopPlayerData> getTopPlayersByLevel(int limit) {
         List<TopPlayerData> topPlayers = new ArrayList<>();
-
+        
         try {
-            Connection connection = plugin.getDatabaseManager().getConnection();
-            if (connection == null) {
-                plugin.getLogger().warning("Failed to get database connection for top players by level");
-                return topPlayers;
-            }
+            topPlayers = plugin.getDatabaseManager().executeInTransaction(connection -> {
+                List<TopPlayerData> result = new ArrayList<>();
+                PreparedStatement statement = null;
+                ResultSet resultSet = null;
+                
+                try {
+                    String sql = "SELECT player_name, level FROM " + plugin.getDatabaseManager().getTablePrefix() +
+                            "player_data ORDER BY level DESC, experience DESC LIMIT ?";
+                    statement = connection.prepareStatement(sql);
+                    statement.setInt(1, limit);
 
-            String sql = "SELECT player_name, level FROM " + plugin.getDatabaseManager().getTablePrefix() +
-                    "player_data ORDER BY level DESC, experience DESC LIMIT ?";
-            PreparedStatement statement = connection.prepareStatement(sql);
-            statement.setInt(1, limit);
-
-            ResultSet resultSet = statement.executeQuery();
-            while (resultSet.next()) {
-                String playerName = resultSet.getString("player_name");
-                int level = resultSet.getInt("level");
-
-                topPlayers.add(new TopPlayerData(playerName, level));
-            }
-
-            resultSet.close();
-            statement.close();
+                    resultSet = statement.executeQuery();
+                    while (resultSet.next()) {
+                        String playerName = resultSet.getString("player_name");
+                        int level = resultSet.getInt("level");
+                        result.add(new TopPlayerData(playerName, level));
+                    }
+                } finally {
+                    if (resultSet != null) resultSet.close();
+                    if (statement != null) statement.close();
+                }
+                
+                return result;
+            });
         } catch (SQLException e) {
             plugin.getLogger().warning("Failed to get top players by level: " + e.getMessage());
         }
@@ -275,34 +311,37 @@ public class VeinMinerPlaceholders extends PlaceholderExpansion {
      */
     private List<TopPlayerData> getTopPlayersByAchievements(int limit) {
         List<TopPlayerData> topPlayers = new ArrayList<>();
-
+        
         try {
-            Connection connection = plugin.getDatabaseManager().getConnection();
-            if (connection == null) {
-                plugin.getLogger().warning("Failed to get database connection for top players by achievements");
-                return topPlayers;
-            }
+            topPlayers = plugin.getDatabaseManager().executeInTransaction(connection -> {
+                List<TopPlayerData> result = new ArrayList<>();
+                PreparedStatement statement = null;
+                ResultSet resultSet = null;
+                
+                try {
+                    String sql = "SELECT a.uuid, p.player_name, COUNT(*) as completed_count " +
+                            "FROM " + plugin.getDatabaseManager().getTablePrefix() + "achievements a " +
+                            "JOIN " + plugin.getDatabaseManager().getTablePrefix() + "player_data p ON a.uuid = p.uuid " +
+                            "WHERE a.completed = 1 " +
+                            "GROUP BY a.uuid, p.player_name " +
+                            "ORDER BY completed_count DESC LIMIT ?";
 
-            String sql = "SELECT a.uuid, p.player_name, COUNT(*) as completed_count " +
-                    "FROM " + plugin.getDatabaseManager().getTablePrefix() + "achievements a " +
-                    "JOIN " + plugin.getDatabaseManager().getTablePrefix() + "player_data p ON a.uuid = p.uuid " +
-                    "WHERE a.completed = 1 " +
-                    "GROUP BY a.uuid, p.player_name " +
-                    "ORDER BY completed_count DESC LIMIT ?";
+                    statement = connection.prepareStatement(sql);
+                    statement.setInt(1, limit);
 
-            PreparedStatement statement = connection.prepareStatement(sql);
-            statement.setInt(1, limit);
-
-            ResultSet resultSet = statement.executeQuery();
-            while (resultSet.next()) {
-                String playerName = resultSet.getString("player_name");
-                int completedCount = resultSet.getInt("completed_count");
-
-                topPlayers.add(new TopPlayerData(playerName, completedCount));
-            }
-
-            resultSet.close();
-            statement.close();
+                    resultSet = statement.executeQuery();
+                    while (resultSet.next()) {
+                        String playerName = resultSet.getString("player_name");
+                        int completedCount = resultSet.getInt("completed_count");
+                        result.add(new TopPlayerData(playerName, completedCount));
+                    }
+                } finally {
+                    if (resultSet != null) resultSet.close();
+                    if (statement != null) statement.close();
+                }
+                
+                return result;
+            });
         } catch (SQLException e) {
             plugin.getLogger().warning("Failed to get top players by achievements: " + e.getMessage());
         }
@@ -317,29 +356,32 @@ public class VeinMinerPlaceholders extends PlaceholderExpansion {
      */
     private List<TopPlayerData> getTopPlayersByBlocksMined(int limit) {
         List<TopPlayerData> topPlayers = new ArrayList<>();
-
+        
         try {
-            Connection connection = plugin.getDatabaseManager().getConnection();
-            if (connection == null) {
-                plugin.getLogger().warning("Failed to get database connection for top players by blocks mined");
-                return topPlayers;
-            }
+            topPlayers = plugin.getDatabaseManager().executeInTransaction(connection -> {
+                List<TopPlayerData> result = new ArrayList<>();
+                PreparedStatement statement = null;
+                ResultSet resultSet = null;
+                
+                try {
+                    String sql = "SELECT player_name, blocks_mined FROM " + plugin.getDatabaseManager().getTablePrefix() +
+                            "player_data ORDER BY blocks_mined DESC LIMIT ?";
+                    statement = connection.prepareStatement(sql);
+                    statement.setInt(1, limit);
 
-            String sql = "SELECT player_name, blocks_mined FROM " + plugin.getDatabaseManager().getTablePrefix() +
-                    "player_data ORDER BY blocks_mined DESC LIMIT ?";
-            PreparedStatement statement = connection.prepareStatement(sql);
-            statement.setInt(1, limit);
-
-            ResultSet resultSet = statement.executeQuery();
-            while (resultSet.next()) {
-                String playerName = resultSet.getString("player_name");
-                int blocksMined = resultSet.getInt("blocks_mined");
-
-                topPlayers.add(new TopPlayerData(playerName, blocksMined));
-            }
-
-            resultSet.close();
-            statement.close();
+                    resultSet = statement.executeQuery();
+                    while (resultSet.next()) {
+                        String playerName = resultSet.getString("player_name");
+                        int blocksMined = resultSet.getInt("blocks_mined");
+                        result.add(new TopPlayerData(playerName, blocksMined));
+                    }
+                } finally {
+                    if (resultSet != null) resultSet.close();
+                    if (statement != null) statement.close();
+                }
+                
+                return result;
+            });
         } catch (SQLException e) {
             plugin.getLogger().warning("Failed to get top players by blocks mined: " + e.getMessage());
         }

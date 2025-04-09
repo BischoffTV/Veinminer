@@ -1,14 +1,18 @@
 package org.bischofftv.veinminer.commands;
 
 import org.bischofftv.veinminer.Veinminer;
+import org.bischofftv.veinminer.data.PlayerData;
 import org.bukkit.Bukkit;
-import org.bukkit.ChatColor;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
+import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
 
-public class LevelSetCommand implements CommandExecutor {
+import java.util.ArrayList;
+import java.util.List;
+
+public class LevelSetCommand implements CommandExecutor, TabCompleter {
 
     private final Veinminer plugin;
 
@@ -18,29 +22,31 @@ public class LevelSetCommand implements CommandExecutor {
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
-        // Check permission
+        // Check if the sender has permission
         if (!sender.hasPermission("veinminer.admin.setlevel")) {
-            sender.sendMessage(plugin.getMessageManager().getMessage("messages.command.no-permission", "You don't have permission to use this command."));
+            sender.sendMessage(plugin.getMessageManager().formatMessage("messages.command.no-permission"));
             return true;
         }
 
-        // Check if level system is enabled
+        // Check if the level system is enabled
         if (!plugin.getLevelManager().isEnabled()) {
-            sender.sendMessage(ChatColor.RED + "Level system is currently disabled.");
+            sender.sendMessage(plugin.getMessageManager().formatMessage("messages.level.disabled"));
             return true;
         }
 
         // Check arguments
         if (args.length < 2) {
-            sender.sendMessage(ChatColor.RED + "Usage: /vmsetlevel <player> <level>");
+            sender.sendMessage(plugin.getMessageManager().formatMessage("messages.command.invalid-args"));
+            sender.sendMessage(plugin.getMessageManager().formatMessage("messages.command.usage", "%command%", "/vmsetlevel <player> <level>"));
             return true;
         }
 
         // Get target player
         String playerName = args[0];
         Player targetPlayer = Bukkit.getPlayer(playerName);
+
         if (targetPlayer == null) {
-            sender.sendMessage(plugin.getMessageManager().getMessage("messages.command.player-not-found", "Player not found: %player%").replace("%player%", playerName));
+            sender.sendMessage(plugin.getMessageManager().formatMessage("messages.command.player-not-found", "%player%", playerName));
             return true;
         }
 
@@ -49,27 +55,58 @@ public class LevelSetCommand implements CommandExecutor {
         try {
             level = Integer.parseInt(args[1]);
             if (level < 1) {
-                sender.sendMessage(ChatColor.RED + "Level must be at least 1.");
-                return true;
-            }
-            if (level > plugin.getLevelManager().getMaxLevel()) {
-                sender.sendMessage(ChatColor.RED + "Level cannot be higher than " + plugin.getLevelManager().getMaxLevel() + ".");
+                sender.sendMessage(plugin.getMessageManager().formatMessage("messages.command.invalid-level"));
                 return true;
             }
         } catch (NumberFormatException e) {
-            sender.sendMessage(ChatColor.RED + "Invalid level. Please enter a number.");
+            sender.sendMessage(plugin.getMessageManager().formatMessage("messages.command.invalid-level"));
             return true;
         }
 
-        // Set player level
-        plugin.getLevelManager().setPlayerLevel(targetPlayer, level);
+        // Set level
+        PlayerData playerData = plugin.getPlayerDataManager().getPlayerData(targetPlayer.getUniqueId());
+        if (playerData != null) {
+            playerData.setLevel(level);
 
-        // Send confirmation message
-        String message = plugin.getMessageManager().formatMessage("messages.level.set")
-                .replace("%player%", targetPlayer.getName())
-                .replace("%level%", String.valueOf(level));
+            // Send messages
+            sender.sendMessage(plugin.getMessageManager().formatMessage("messages.level.set",
+                    "%player%", targetPlayer.getName(),
+                    "%level%", String.valueOf(level)));
 
-        sender.sendMessage(message);
+            if (sender != targetPlayer) {
+                targetPlayer.sendMessage(plugin.getMessageManager().formatMessage("messages.level.set-target",
+                        "%level%", String.valueOf(level)));
+            }
+
+            // Check for level-based achievements
+            if (plugin.getAchievementManager().isEnabled()) {
+                plugin.getAchievementManager().updateLevelAchievements(targetPlayer, level);
+            }
+        } else {
+            sender.sendMessage(plugin.getMessageManager().formatMessage("messages.error.player-data-not-found"));
+        }
+
         return true;
+    }
+
+    @Override
+    public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
+        List<String> completions = new ArrayList<>();
+
+        if (args.length == 1) {
+            // Suggest online players
+            for (Player player : Bukkit.getOnlinePlayers()) {
+                if (player.getName().toLowerCase().startsWith(args[0].toLowerCase())) {
+                    completions.add(player.getName());
+                }
+            }
+        } else if (args.length == 2) {
+            // Suggest some level values
+            for (int i = 1; i <= 10; i++) {
+                completions.add(String.valueOf(i));
+            }
+        }
+
+        return completions;
     }
 }

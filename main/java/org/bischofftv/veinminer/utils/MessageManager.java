@@ -4,123 +4,82 @@ import org.bischofftv.veinminer.Veinminer;
 import org.bukkit.ChatColor;
 import org.bukkit.configuration.file.FileConfiguration;
 
-import java.util.Map;
-
 public class MessageManager {
 
     private final Veinminer plugin;
+    private FileConfiguration langConfig;
 
     public MessageManager(Veinminer plugin) {
         this.plugin = plugin;
+        reload();
     }
 
     /**
-     * Format a message with the plugin prefix
-     * @param path The path to the message in the lang.yml file
-     * @return The formatted message
+     * Reload the message configuration
      */
-    public String formatMessage(String path) {
-        String message = getMessage(path);
-        String prefix = getMessage("messages.prefix");
-        return ChatColor.translateAlternateColorCodes('&', prefix + message);
+    public void reload() {
+        langConfig = plugin.getLangConfig();
     }
 
     /**
-     * Format a message with the plugin prefix and replacements
-     * @param path The path to the message in the lang.yml file
-     * @param replacements The replacements to make in the message (key-value pairs)
-     * @return The formatted message
-     */
-    public String formatMessage(String path, String... replacements) {
-        String message = getMessage(path);
-
-        // Apply replacements
-        if (replacements != null && replacements.length >= 2) {
-            for (int i = 0; i < replacements.length; i += 2) {
-                if (i + 1 < replacements.length) {
-                    message = message.replace(replacements[i], replacements[i + 1]);
-                }
-            }
-        }
-
-        String prefix = getMessage("messages.prefix");
-        return ChatColor.translateAlternateColorCodes('&', prefix + message);
-    }
-
-    /**
-     * Format a message with the plugin prefix and replacements
-     * @param path The path to the message in the lang.yml file
-     * @param replacements The replacements to make in the message
-     * @return The formatted message
-     */
-    public String formatMessage(String path, Map<String, String> replacements) {
-        String message = getMessage(path);
-
-        // Apply replacements
-        if (replacements != null) {
-            for (Map.Entry<String, String> entry : replacements.entrySet()) {
-                message = message.replace(entry.getKey(), entry.getValue());
-            }
-        }
-
-        String prefix = getMessage("messages.prefix");
-        return ChatColor.translateAlternateColorCodes('&', prefix + message);
-    }
-
-    /**
-     * Get a message from the lang.yml file
+     * Get a message from the language configuration
      * @param path The path to the message
+     * @param defaultMessage The default message if the path is not found
      * @return The message
      */
-    public String getMessage(String path) {
-        // Get from lang.yml
-        FileConfiguration langConfig = plugin.getLangConfig();
-        if (langConfig != null && langConfig.contains(path)) {
-            return langConfig.getString(path, "Message not found: " + path);
+    public String getMessage(String path, String defaultMessage) {
+        String message = langConfig.getString(path);
+        if (message == null) {
+            return defaultMessage;
         }
-
-        return "Message not found: " + path;
-    }
-
-    /**
-     * Get a message from the lang.yml file with replacements
-     * @param path The path to the message
-     * @param replacements The replacements to make in the message
-     * @return The message
-     */
-    public String getMessage(String path, Map<String, String> replacements) {
-        String message = getMessage(path);
-
-        // Apply replacements
-        if (replacements != null) {
-            for (Map.Entry<String, String> entry : replacements.entrySet()) {
-                message = message.replace(entry.getKey(), entry.getValue());
-            }
-        }
-
         return message;
     }
 
     /**
-     * Get a message from the lang.yml file with a default value
+     * Format a message with the plugin prefix and color codes
      * @param path The path to the message
-     * @param defaultValue The default value to return if the message is not found
-     * @return The message or the default value
+     * @return The formatted message
      */
-    public String getMessage(String path, String defaultValue) {
-        // Get from lang.yml
-        FileConfiguration langConfig = plugin.getLangConfig();
-        if (langConfig != null && langConfig.contains(path)) {
-            return langConfig.getString(path, defaultValue);
-        }
-
-        return defaultValue;
+    public String formatMessage(String path) {
+        String prefix = getMessage("messages.prefix", "&8[&6VeinMiner&8] ");
+        String message = getMessage(path, "Message not found: " + path);
+        return ChatColor.translateAlternateColorCodes('&', prefix + message);
     }
 
     /**
-     * Reload the messages from the lang.yml file
+     * Format a message with the plugin prefix, color codes, and a placeholder
+     * @param path The path to the message
+     * @param placeholder The placeholder to replace
+     * @param replacement The replacement for the placeholder
+     * @return The formatted message
      */
-    public void reloadMessages() {
-        plugin.reloadLangConfig();
+    public String formatMessage(String path, String placeholder, String replacement) {
+        String prefix = getMessage("messages.prefix", "&8[&6VeinMiner&8] ");
+        String message = getMessage(path, "Message not found: " + path);
+        message = message.replace(placeholder, replacement);
+        return ChatColor.translateAlternateColorCodes('&', prefix + message);
+    }
+
+    /**
+     * Format a message with the plugin prefix, color codes, and multiple placeholders
+     * @param path The path to the message
+     * @param placeholdersAndReplacements The placeholders and replacements in pairs
+     * @return The formatted message
+     */
+    public String formatMessage(String path, String... placeholdersAndReplacements) {
+        if (placeholdersAndReplacements.length % 2 != 0) {
+            throw new IllegalArgumentException("Placeholders and replacements must be in pairs");
+        }
+
+        String prefix = getMessage("messages.prefix", "&8[&6VeinMiner&8] ");
+        String message = getMessage(path, "Message not found: " + path);
+
+        for (int i = 0; i < placeholdersAndReplacements.length; i += 2) {
+            String placeholder = placeholdersAndReplacements[i];
+            String replacement = placeholdersAndReplacements[i + 1];
+            message = message.replace(placeholder, replacement);
+        }
+
+        return ChatColor.translateAlternateColorCodes('&', prefix + message);
     }
 }

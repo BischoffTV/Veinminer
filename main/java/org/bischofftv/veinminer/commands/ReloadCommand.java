@@ -4,8 +4,12 @@ import org.bischofftv.veinminer.Veinminer;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
+import org.bukkit.command.TabCompleter;
 
-public class ReloadCommand implements CommandExecutor {
+import java.util.ArrayList;
+import java.util.List;
+
+public class ReloadCommand implements CommandExecutor, TabCompleter {
 
     private final Veinminer plugin;
 
@@ -15,36 +19,35 @@ public class ReloadCommand implements CommandExecutor {
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
-        // Check permission
+        // Check if the sender has permission
         if (!sender.hasPermission("veinminer.admin.reload")) {
-            sender.sendMessage(plugin.getMessageManager().getMessage("messages.command.no-permission", "You don't have permission to use this command."));
+            sender.sendMessage(plugin.getMessageManager().formatMessage("messages.command.no-permission"));
             return true;
         }
 
-        // Reload configurations
+        // Reload the plugin configuration
         plugin.reloadConfig();
-        plugin.reloadLangConfig();
-        plugin.reloadMessagesConfig();
-
-        // Reload managers
-        if (plugin.getConfigManager() != null) {
-            plugin.getConfigManager().reload();
-        }
-
-        if (plugin.getLevelManager() != null) {
-            plugin.getLevelManager().reloadLevelSettings();
-        }
-
-        // Reload achievements last to ensure database schema is updated
-        if (plugin.getAchievementManager() != null) {
-            plugin.getAchievementManager().reloadAchievements();
-        }
+        plugin.getMessageManager().reload();
+        plugin.getConfigManager().loadConfig();
+        plugin.getLevelManager().loadConfig();
+        plugin.getSkillManager().loadConfig();
+        plugin.getAchievementManager().loadConfig();
 
         // Restart auto-save task
         plugin.restartAutoSaveTask();
 
-        // Send confirmation message
-        sender.sendMessage(plugin.getMessageManager().formatMessage("messages.reload.success", "VeinMiner configuration has been reloaded."));
+        // Send success message
+        sender.sendMessage(plugin.getMessageManager().formatMessage("messages.reload.success"));
+
+        // Log reload
+        plugin.getLogger().info("Plugin configuration reloaded by " + sender.getName());
+
         return true;
+    }
+
+    @Override
+    public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
+        // No tab completions for this command
+        return new ArrayList<>();
     }
 }

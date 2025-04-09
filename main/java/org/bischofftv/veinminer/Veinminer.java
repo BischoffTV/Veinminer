@@ -22,6 +22,7 @@ import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.TabCompleter;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
+import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitTask;
 
@@ -687,5 +688,21 @@ public class Veinminer extends JavaPlugin {
             return bStatsConfig.getString("serverUuid", "Unknown");
         }
         return "Unknown";
+    }
+
+    /**
+     * Check if a player has permission to use a specific feature
+     * @param player The player to check
+     * @param permission The permission to check
+     * @return True if the player has permission or if permissions are disabled, false otherwise
+     */
+    public boolean hasPermission(Player player, String permission) {
+        // Check if permissions are required
+        if (!getConfig().getBoolean("permissions.require-permission", true)) {
+            return true;
+        }
+
+        // Check if the player has the permission
+        return player.hasPermission(permission);
     }
 }
