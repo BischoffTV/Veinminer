@@ -30,7 +30,6 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.util.Objects;
 
 public class Veinminer extends JavaPlugin {
 
@@ -698,7 +697,7 @@ public class Veinminer extends JavaPlugin {
      */
     public boolean hasPermission(Player player, String permission) {
         // Check if permissions are required
-        if (!getConfig().getBoolean("permissions.require-permission", true)) {
+        if (!getConfig().getBoolean("permissions.require-permission", false)) {
             return true;
         }
 

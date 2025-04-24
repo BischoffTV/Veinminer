@@ -70,7 +70,7 @@ public class CommandHandler implements CommandExecutor {
                 }
 
                 // Check if the player has permission for this specific tool
-                if (!player.hasPermission("veinminer.tool." + toolType)) {
+                if (!plugin.hasPermission(player, "veinminer.tool." + toolType)) {
                     player.sendMessage(plugin.getMessageManager().formatMessage("messages.permission.tool-not-allowed", "%tool%", toolType));
                     return true;
                 }
@@ -79,7 +79,7 @@ public class CommandHandler implements CommandExecutor {
                 return true;
 
             case "achievements":
-                if (!player.hasPermission("veinminer.command.achievements")) {
+                if (!plugin.hasPermission(player, "veinminer.command.achievements")) {
                     player.sendMessage(plugin.getMessageManager().formatMessage("messages.command.no-permission"));
                     return true;
                 }
@@ -93,7 +93,7 @@ public class CommandHandler implements CommandExecutor {
                 return true;
 
             case "help":
-                if (!player.hasPermission("veinminer.command.help")) {
+                if (!plugin.hasPermission(player, "veinminer.command.help")) {
                     player.sendMessage(plugin.getMessageManager().formatMessage("messages.command.no-permission"));
                     return true;
                 }
@@ -102,7 +102,7 @@ public class CommandHandler implements CommandExecutor {
                 return true;
 
             case "reload":
-                if (!player.hasPermission("veinminer.admin.reload")) {
+                if (!plugin.hasPermission(player, "veinminer.admin.reload")) {
                     player.sendMessage(plugin.getMessageManager().formatMessage("messages.command.no-permission"));
                     return true;
                 }
@@ -113,7 +113,7 @@ public class CommandHandler implements CommandExecutor {
                 return true;
 
             case "about":
-                if (!player.hasPermission("veinminer.command.about")) {
+                if (!plugin.hasPermission(player, "veinminer.command.about")) {
                     player.sendMessage(plugin.getMessageManager().formatMessage("messages.command.no-permission"));
                     return true;
                 }

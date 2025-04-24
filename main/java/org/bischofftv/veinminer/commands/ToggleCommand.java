@@ -54,10 +54,9 @@ public class ToggleCommand implements CommandExecutor {
      * @return True if the player has permission, false otherwise
      */
     private boolean hasPermission(Player player, String permission) {
-        if (player.hasPermission("veinminer.admin")) {
+        if (plugin.hasPermission(player, "veinminer.admin")) {
             return true;
         }
-
-        return player.hasPermission(permission);
+        return plugin.hasPermission(player, permission);
     }
 }

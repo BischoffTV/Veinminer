@@ -2,6 +2,7 @@ package org.bischofftv.veinminer.utils;
 
 import org.bischofftv.veinminer.Veinminer;
 import org.bukkit.Bukkit;
+import org.bukkit.entity.Player;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -107,5 +108,17 @@ public class UpdateChecker {
      */
     public String getLatestVersion() {
         return latestVersion;
+    }
+
+    /**
+     * Send an update notification to a player
+     * @param player The player to notify
+     */
+    public void sendUpdateNotification(Player player) {
+        if (updateAvailable) {
+            player.sendMessage(plugin.getMessageManager().formatMessage("messages.update.available",
+                    "%current%", plugin.getDescription().getVersion(),
+                    "%latest%", latestVersion));
+        }
     }
 }

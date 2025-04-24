@@ -324,7 +324,7 @@ public class BlockBreakListener implements Listener {
      * @return True if the player has permission, false otherwise
      */
     private boolean hasToolPermission(Player player, String toolType) {
-        if (!plugin.getConfig().getBoolean("permissions.require-tool-permission", true)) {
+        if (!plugin.getConfig().getBoolean("permissions.require-tool-permission", false)) {
             return true;
         }
 

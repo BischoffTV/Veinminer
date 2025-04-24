@@ -6,6 +6,7 @@ import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
+import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
@@ -167,6 +168,15 @@ public class MainGUI {
         meta.setLore(lore);
         item.setItemMeta(meta);
         return item;
+    }
+
+    /**
+     * Handle inventory click event
+     * @param event The inventory click event
+     */
+    public void handleInventoryClick(InventoryClickEvent event) {
+        // This method is called by the InventoryClickListener
+        // The actual handling is done in the GUIListener class
     }
 }
 
