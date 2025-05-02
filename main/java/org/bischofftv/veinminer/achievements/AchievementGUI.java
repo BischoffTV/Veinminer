@@ -36,19 +36,33 @@ public class AchievementGUI {
             return;
         }
 
-        // Create inventory
-        Inventory inventory = Bukkit.createInventory(null, 54, ChatColor.GOLD + "VeinMiner Achievements");
+        if (plugin.isDebugMode()) {
+            plugin.getLogger().info("[Debug] Opening achievement GUI for " + player.getName());
+        }
+
+        // Create inventory with translated title
+        String title = plugin.getMessageManager().getMessage("gui.achievements-title", "VeinMiner Achievements");
+        Inventory inventory = Bukkit.createInventory(null, 54, ChatColor.translateAlternateColorCodes('&', title));
 
         // Get player achievements
         Map<String, Integer> achievements = plugin.getAchievementManager().getPlayerAchievements(player);
         Map<String, Boolean> claimedRewards = plugin.getAchievementManager().getPlayerClaimedRewards(player);
         Map<String, Map<String, Object>> definitions = plugin.getAchievementManager().getAchievementDefinitions();
 
+        if (plugin.isDebugMode()) {
+            plugin.getLogger().info("[Debug] Player " + player.getName() + " has " + achievements.size() + " achievements");
+            plugin.getLogger().info("[Debug] Found " + definitions.size() + " achievement definitions");
+        }
+
         // Reset achievement slots
         achievementSlots.clear();
 
         // Check if there are any achievements
         if (definitions.isEmpty()) {
+            if (plugin.isDebugMode()) {
+                plugin.getLogger().info("[Debug] No achievement definitions found");
+            }
+
             ItemStack noAchievementsItem = createItem(Material.BARRIER,
                     ChatColor.translateAlternateColorCodes('&', plugin.getMessageManager().getMessage("gui.achievements-none-title", "&cNo Achievements Available")),
                     ChatColor.translateAlternateColorCodes('&', plugin.getMessageManager().getMessage("gui.achievements-none-lore", "&7No achievements have been defined.")));
@@ -59,6 +73,10 @@ public class AchievementGUI {
             for (Map.Entry<String, Map<String, Object>> entry : definitions.entrySet()) {
                 String achievementId = entry.getKey();
                 Map<String, Object> achievement = entry.getValue();
+
+                if (plugin.isDebugMode()) {
+                    plugin.getLogger().info("[Debug] Processing achievement: " + achievementId);
+                }
 
                 // Get achievement details
                 String name = (String) achievement.get("name");
@@ -100,7 +118,7 @@ public class AchievementGUI {
                                     int amount = Integer.parseInt(parts[1]);
                                     lore.add(ChatColor.GOLD + "- " + amount + "x " + formatMaterialName(material.name()));
                                 } catch (IllegalArgumentException e) {
-                                    // Ignore invalid items
+                                    plugin.getLogger().warning("Invalid item in achievement rewards: " + itemString);
                                 }
                             }
                         }
@@ -133,6 +151,10 @@ public class AchievementGUI {
                 inventory.setItem(slot, achievementItem);
                 achievementSlots.put(achievementId, slot);
 
+                if (plugin.isDebugMode()) {
+                    plugin.getLogger().info("[Debug] Added achievement " + achievementId + " to slot " + slot);
+                }
+
                 // Update slot
                 slot++;
                 if ((slot + 1) % 9 == 0) {
@@ -148,8 +170,8 @@ public class AchievementGUI {
 
         // Add back button
         ItemStack backButton = createItem(Material.OAK_DOOR,
-                ChatColor.GREEN + "Back to Main Menu",
-                ChatColor.GRAY + "Return to the main menu");
+                ChatColor.GREEN + plugin.getMessageManager().getMessage("gui.back-title", "Back to Main Menu"),
+                ChatColor.GRAY + plugin.getMessageManager().getMessage("gui.back-lore", "Return to the main menu"));
         inventory.setItem(49, backButton);
 
         // Fill empty slots with glass panes
@@ -158,6 +180,10 @@ public class AchievementGUI {
             if (inventory.getItem(i) == null) {
                 inventory.setItem(i, filler);
             }
+        }
+
+        if (plugin.isDebugMode()) {
+            plugin.getLogger().info("[Debug] Opening achievement GUI for " + player.getName() + " with " + achievementSlots.size() + " achievements");
         }
 
         player.openInventory(inventory);

@@ -189,15 +189,47 @@ public class DatabaseManager {
 
             // SQLite doesn't support AUTO_INCREMENT or TIMESTAMP
             if (isFallbackMode()) {
+                // Modify SQL for SQLite compatibility
                 playerDataTable = playerDataTable.replace("TIMESTAMP DEFAULT CURRENT_TIMESTAMP", "TEXT DEFAULT CURRENT_TIMESTAMP");
-                achievementsTable = achievementsTable.replace("INT AUTO_INCREMENT PRIMARY KEY", "INTEGER PRIMARY KEY AUTOINCREMENT");
+                achievementsTable = achievementsTable.replace("INT AUTO_INCREMENT PRIMARY KEY", "INTEGER PRIMARY KEY AUTOINCREMENT")
+                        .replace("BOOLEAN DEFAULT 0", "INTEGER DEFAULT 0");
                 syncStatusTable = syncStatusTable.replace("INT AUTO_INCREMENT PRIMARY KEY", "INTEGER PRIMARY KEY AUTOINCREMENT")
                         .replace("TIMESTAMP DEFAULT CURRENT_TIMESTAMP", "TEXT DEFAULT CURRENT_TIMESTAMP");
+                
+                if (plugin.isDebugMode()) {
+                    plugin.getLogger().info("[Debug] Using SQLite-compatible table structure");
+                }
             }
 
-            statement.executeUpdate(playerDataTable);
-            statement.executeUpdate(achievementsTable);
-            statement.executeUpdate(syncStatusTable);
+            try {
+                statement.executeUpdate(playerDataTable);
+                plugin.getLogger().info("Player data table created/verified successfully");
+            } catch (SQLException e) {
+                plugin.getLogger().severe("Failed to create player data table: " + e.getMessage());
+                if (plugin.isDebugMode()) {
+                    e.printStackTrace();
+                }
+            }
+
+            try {
+                statement.executeUpdate(achievementsTable);
+                plugin.getLogger().info("Achievements table created/verified successfully");
+            } catch (SQLException e) {
+                plugin.getLogger().severe("Failed to create achievements table: " + e.getMessage());
+                if (plugin.isDebugMode()) {
+                    e.printStackTrace();
+                }
+            }
+
+            try {
+                statement.executeUpdate(syncStatusTable);
+                plugin.getLogger().info("Sync status table created/verified successfully");
+            } catch (SQLException e) {
+                plugin.getLogger().severe("Failed to create sync status table: " + e.getMessage());
+                if (plugin.isDebugMode()) {
+                    e.printStackTrace();
+                }
+            }
 
             plugin.getLogger().info("Database tables created/verified.");
         } catch (SQLException e) {
