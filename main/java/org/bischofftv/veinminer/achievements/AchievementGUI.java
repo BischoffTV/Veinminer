@@ -82,8 +82,30 @@ public class AchievementGUI {
                 String name = (String) achievement.get("name");
                 String description = (String) achievement.get("description");
                 int requiredAmount = (int) achievement.get("amount");
-                int progress = achievements.getOrDefault(achievementId, 0);
-                boolean completed = progress >= requiredAmount;
+                int progress;
+                boolean completed;
+                String type = (String) achievement.get("type");
+                if ("LEVEL".equalsIgnoreCase(type)) {
+                    // Dynamisch: aktueller Level
+                    int playerLevel = 1;
+                    if (plugin.getPlayerDataManager() != null && plugin.getPlayerDataManager().getPlayerData(player.getUniqueId()) != null) {
+                        playerLevel = plugin.getPlayerDataManager().getPlayerData(player.getUniqueId()).getLevel();
+                    }
+                    progress = playerLevel;
+                    completed = playerLevel >= requiredAmount;
+                } else if ("TOTAL_BLOCKS".equalsIgnoreCase(type)) {
+                    // Dynamisch: Gesamtzahl abgebauter Blöcke
+                    int blocksMined = 0;
+                    if (plugin.getPlayerDataManager() != null && plugin.getPlayerDataManager().getPlayerData(player.getUniqueId()) != null) {
+                        blocksMined = (int) plugin.getPlayerDataManager().getPlayerData(player.getUniqueId()).getBlocksMined();
+                    }
+                    progress = blocksMined;
+                    completed = progress >= requiredAmount;
+                } else {
+                    // BLOCK_MINE und andere: gespeicherter Fortschritt
+                    progress = achievements.getOrDefault(achievementId, 0);
+                    completed = progress >= requiredAmount;
+                }
                 boolean claimed = claimedRewards.getOrDefault(achievementId, false);
 
                 // Create lore

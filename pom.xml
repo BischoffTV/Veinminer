@@ -6,7 +6,7 @@
 
     <groupId>org.bischofftv</groupId>
     <artifactId>Veinminer</artifactId>
-    <version>1.2.3</version>
+    <version>1.2.5</version>
     <packaging>jar</packaging>
 
     <name>Veinminer</name>

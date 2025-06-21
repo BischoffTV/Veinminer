@@ -121,6 +121,26 @@ public class CommandHandler implements CommandExecutor {
                 sendAboutMessage(player);
                 return true;
 
+            case "setlevel":
+                if (!plugin.hasPermission(player, "veinminer.admin.setlevel")) {
+                    player.sendMessage(plugin.getMessageManager().formatMessage("messages.command.no-permission"));
+                    return true;
+                }
+
+                if (!plugin.getLevelManager().isEnabled()) {
+                    player.sendMessage(plugin.getMessageManager().formatMessage("messages.level.disabled"));
+                    return true;
+                }
+
+                if (args.length < 3) {
+                    player.sendMessage(plugin.getMessageManager().formatMessage("messages.command.invalid-args"));
+                    player.sendMessage(plugin.getMessageManager().formatMessage("messages.command.usage", "%command%", "/veinminer setlevel <player> <level>"));
+                    return true;
+                }
+
+                handleSetLevel(player, args[1], args[2]);
+                return true;
+
             default:
                 player.sendMessage(plugin.getMessageManager().formatMessage("messages.command.invalid-args"));
                 return true;
@@ -200,7 +220,76 @@ public class CommandHandler implements CommandExecutor {
     private void sendAboutMessage(Player player) {
         player.sendMessage(plugin.getMessageManager().formatMessage("messages.about.header"));
         player.sendMessage(plugin.getMessageManager().formatMessage("messages.about.version", "%version%", plugin.getDescription().getVersion()));
-        player.sendMessage(plugin.getMessageManager().formatMessage("messages.about.author", "%author%", "BischoffTV"));
-        player.sendMessage(plugin.getMessageManager().formatMessage("messages.about.website", "%website%", "https://github.com/BischoffTV/Veinminer"));
+        player.sendMessage(plugin.getMessageManager().formatMessage("messages.about.author"));
+        player.sendMessage(plugin.getMessageManager().formatMessage("messages.about.website"));
+    }
+
+    /**
+     * Handle the setlevel subcommand
+     * @param sender The command sender
+     * @param playerName The target player name
+     * @param levelStr The level string
+     */
+    private void handleSetLevel(CommandSender sender, String playerName, String levelStr) {
+        // Get target player
+        org.bukkit.entity.Player targetPlayer = org.bukkit.Bukkit.getPlayer(playerName);
+
+        if (targetPlayer == null) {
+            sender.sendMessage(plugin.getMessageManager().formatMessage("messages.command.player-not-found", "%player%", playerName));
+            return;
+        }
+
+        // Parse level
+        int level;
+        try {
+            level = Integer.parseInt(levelStr);
+            if (level < 1) {
+                sender.sendMessage(plugin.getMessageManager().formatMessage("messages.command.invalid-level"));
+                return;
+            }
+        } catch (NumberFormatException e) {
+            sender.sendMessage(plugin.getMessageManager().formatMessage("messages.command.invalid-level"));
+            return;
+        }
+
+        // Set level
+        org.bischofftv.veinminer.data.PlayerData playerData = plugin.getPlayerDataManager().getPlayerData(targetPlayer.getUniqueId());
+        if (playerData != null) {
+            playerData.setLevel(level);
+            // XP für das gesetzte Level aus der Config setzen
+            int xpForLevel = 0;
+            try {
+                // Hole LevelManager und die XP-Map
+                Object levelManager = plugin.getLevelManager();
+                java.lang.reflect.Field xpPerLevelField = levelManager.getClass().getDeclaredField("xpPerLevel");
+                xpPerLevelField.setAccessible(true);
+                java.util.Map xpPerLevel = (java.util.Map) xpPerLevelField.get(levelManager);
+                if (xpPerLevel.containsKey(level)) {
+                    xpForLevel = (int) xpPerLevel.get(level);
+                }
+            } catch (Exception e) {
+                // Fallback: XP bleibt 0
+            }
+            playerData.setExperience(xpForLevel);
+            // Kein sofortiges Speichern mehr!
+            // plugin.getPlayerDataManager().savePlayerData(targetPlayer.getUniqueId());
+
+            // Send messages
+            sender.sendMessage(plugin.getMessageManager().formatMessage("messages.level.set",
+                    "%player%", targetPlayer.getName(),
+                    "%level%", String.valueOf(level)));
+
+            if (sender != targetPlayer) {
+                targetPlayer.sendMessage(plugin.getMessageManager().formatMessage("messages.level.set-target",
+                        "%level%", String.valueOf(level)));
+            }
+
+            // Check for level-based achievements
+            if (plugin.getAchievementManager().isEnabled()) {
+                plugin.getAchievementManager().updateLevelAchievements(targetPlayer, level);
+            }
+        } else {
+            sender.sendMessage(plugin.getMessageManager().formatMessage("messages.error.player-data-not-found"));
+        }
     }
 }

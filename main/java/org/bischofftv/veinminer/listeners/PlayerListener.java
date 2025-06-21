@@ -66,16 +66,21 @@ public class PlayerListener implements Listener {
     public void onPlayerQuit(PlayerQuitEvent event) {
         Player player = event.getPlayer();
 
-        // Save player data
-        plugin.getPlayerDataManager().savePlayerData(player.getUniqueId());
+        // Nur speichern, wenn save-on-quit aktiviert ist
+        boolean saveOnQuit = plugin.getConfigManager().isSaveOnQuit();
+        if (saveOnQuit) {
+            plugin.getPlayerDataManager().savePlayerData(player.getUniqueId());
+        }
 
         // Save achievements if enabled
         if (plugin.getAchievementManager().isEnabled()) {
             plugin.getAchievementManager().savePlayerAchievements(player.getUniqueId());
         }
 
-        // Remove player data from memory
-        plugin.getPlayerDataManager().removePlayerData(player.getUniqueId());
+        // Nur aus dem RAM entfernen, wenn save-on-quit true ist
+        if (saveOnQuit) {
+            plugin.getPlayerDataManager().removePlayerData(player.getUniqueId());
+        }
 
         // Debug log
         if (plugin.isDebugMode()) {

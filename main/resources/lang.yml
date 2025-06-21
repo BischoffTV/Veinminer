@@ -9,6 +9,7 @@ messages:
     invalid-args: "&cInvalid arguments. Use &6/%command% help&c for help."
     player-not-found: "&cPlayer not found: %player%"
     invalid-tool: "&cInvalid tool type. Valid types: pickaxe, axe, shovel, hoe."
+    invalid-level: "&cInvalid level. Level must be a positive number."
     usage: "&cUsage: /veinminer [gui|toggle|tool|achievements|help|about]"
 
   permission:
@@ -23,7 +24,9 @@ messages:
   level:
     info: "&aYour VeinMiner level is &6%level% &a(&6%experience%&a/&6%next_level_experience%&a XP)"
     set: "&aSet %player%'s VeinMiner level to &6%level%&a."
+    set-target: "&aYour VeinMiner level has been set to &6%level%&a."
     up: "&aYou have reached VeinMiner level &6%level%&a!"
+    disabled: "&cThe level system is currently disabled."
 
   reload:
     success: "&aVeinMiner configuration has been reloaded."

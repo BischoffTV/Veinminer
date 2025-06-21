@@ -82,11 +82,11 @@ public class AchievementManager {
         }
 
         // Load achievements from the correct path
-        ConfigurationSection achievementsSection = plugin.getConfig().getConfigurationSection("achievement-system.achievements");
+        ConfigurationSection achievementsSection = plugin.getConfig().getConfigurationSection("achievements");
         if (achievementsSection == null) {
-            plugin.getLogger().warning("No achievements section found in config.yml under achievement-system.achievements");
+            plugin.getLogger().warning("No achievements section found in config.yml at top-level 'achievements'");
             if (plugin.isDebugMode()) {
-                plugin.getLogger().info("[Debug] No achievements section found in config.yml under achievement-system.achievements");
+                plugin.getLogger().info("[Debug] No achievements section found in config.yml at top-level 'achievements'");
             }
             return;
         }
@@ -197,6 +197,14 @@ public class AchievementManager {
         // Load economy settings
         economyEnabled = plugin.getConfig().getBoolean("achievement-system.economy.enabled", true);
         giveCommand = plugin.getConfig().getString("achievement-system.economy.give-command", "eco give %player% %amount%");
+
+        // Debug: Log all loaded icon mappings
+        if (plugin.isDebugMode()) {
+            plugin.getLogger().info("[Debug] Icon-Mappings:");
+            for (String key : customIcons.keySet()) {
+                plugin.getLogger().info("[Debug] " + key + " -> " + customIcons.get(key));
+            }
+        }
     }
 
     /**
@@ -228,13 +236,17 @@ public class AchievementManager {
 
         // Try to load from database
         if (plugin.getDatabaseManager() != null && plugin.getDatabaseManager().checkConnection()) {
+            Connection connection = null;
+            PreparedStatement statement = null;
+            ResultSet resultSet = null;
+            
             try {
-                Connection connection = plugin.getDatabaseManager().getConnection();
+                connection = plugin.getDatabaseManager().getConnection();
                 String sql = "SELECT * FROM " + plugin.getDatabaseManager().getTablePrefix() + "achievements WHERE uuid = ?";
-                PreparedStatement statement = connection.prepareStatement(sql);
+                statement = connection.prepareStatement(sql);
                 statement.setString(1, uuid.toString());
 
-                ResultSet resultSet = statement.executeQuery();
+                resultSet = statement.executeQuery();
                 while (resultSet.next()) {
                     String achievementId = resultSet.getString("achievement_id");
                     int progress = resultSet.getInt("progress");
@@ -262,14 +274,14 @@ public class AchievementManager {
                                 ", completed=" + completed + ", claimed=" + rewardClaimed);
                     }
                 }
-
-                resultSet.close();
-                statement.close();
             } catch (SQLException e) {
                 plugin.getLogger().warning("Failed to load achievements for " + player.getName() + ": " + e.getMessage());
                 if (plugin.isDebugMode()) {
                     e.printStackTrace();
                 }
+            } finally {
+                // Close resources properly
+                plugin.getDatabaseManager().closeResources(resultSet, statement, connection);
             }
         }
 
@@ -309,20 +321,23 @@ public class AchievementManager {
         }
 
         if (plugin.getDatabaseManager() != null && plugin.getDatabaseManager().checkConnection()) {
+            Connection connection = null;
+            PreparedStatement deleteStatement = null;
+            PreparedStatement insertStatement = null;
+            
             try {
-                Connection connection = plugin.getDatabaseManager().getConnection();
+                connection = plugin.getDatabaseManager().getConnection();
 
                 // First delete existing achievements for this player
                 String deleteSql = "DELETE FROM " + plugin.getDatabaseManager().getTablePrefix() + "achievements WHERE uuid = ?";
-                PreparedStatement deleteStatement = connection.prepareStatement(deleteSql);
+                deleteStatement = connection.prepareStatement(deleteSql);
                 deleteStatement.setString(1, uuid.toString());
                 deleteStatement.executeUpdate();
-                deleteStatement.close();
 
                 // Then insert new achievements
                 String insertSql = "INSERT INTO " + plugin.getDatabaseManager().getTablePrefix() +
                         "achievements (uuid, achievement_id, progress, completed, reward_claimed) VALUES (?, ?, ?, ?, ?)";
-                PreparedStatement insertStatement = connection.prepareStatement(insertSql);
+                insertStatement = connection.prepareStatement(insertSql);
 
                 for (Map.Entry<String, Integer> entry : achievements.entrySet()) {
                     String achievementId = entry.getKey();
@@ -330,40 +345,35 @@ public class AchievementManager {
 
                     // Check if achievement is completed
                     boolean completed = false;
+                    int requiredAmount = 1;
                     if (achievementDefinitions.containsKey(achievementId)) {
-                        int requiredAmount = (int) achievementDefinitions.get(achievementId).get("amount");
+                        requiredAmount = (int) achievementDefinitions.get(achievementId).get("amount");
                         completed = progress >= requiredAmount;
                     }
 
                     // Check if reward is claimed
                     boolean rewardClaimed = claimed.getOrDefault(achievementId, false);
 
+                    // Debug-Ausgabe
+                    if (plugin.isDebugMode()) {
+                        plugin.getLogger().info("[Debug] savePlayerAchievements: " + uuid + ", " + achievementId + ", progress=" + progress + ", required=" + requiredAmount + ", completed=" + completed + ", claimed=" + rewardClaimed);
+                    }
+
                     insertStatement.setString(1, uuid.toString());
                     insertStatement.setString(2, achievementId);
                     insertStatement.setInt(3, progress);
-                    
                     // Handle boolean values differently for SQLite
                     if (plugin.getDatabaseManager().isFallbackMode()) {
-                        // SQLite stores booleans as integers (0 or 1)
                         insertStatement.setInt(4, completed ? 1 : 0);
                         insertStatement.setInt(5, rewardClaimed ? 1 : 0);
                     } else {
-                        // MySQL stores booleans as booleans
                         insertStatement.setBoolean(4, completed);
                         insertStatement.setBoolean(5, rewardClaimed);
                     }
-                    
                     insertStatement.addBatch();
-                    
-                    if (plugin.isDebugMode()) {
-                        plugin.getLogger().info("[Debug] Saving achievement " + achievementId + 
-                                " for " + uuid + ": progress=" + progress + 
-                                ", completed=" + completed + ", claimed=" + rewardClaimed);
-                    }
                 }
 
                 insertStatement.executeBatch();
-                insertStatement.close();
 
                 // Debug log
                 if (plugin.isDebugMode()) {
@@ -374,6 +384,9 @@ public class AchievementManager {
                 if (plugin.isDebugMode()) {
                     e.printStackTrace();
                 }
+            } finally {
+                plugin.getDatabaseManager().closeResources(null, deleteStatement, null);
+                plugin.getDatabaseManager().closeResources(null, insertStatement, connection);
             }
         }
     }
@@ -574,10 +587,23 @@ public class AchievementManager {
             return false;
         }
 
+        Map<String, Object> definition = achievementDefinitions.get(achievementId);
+        String type = (String) definition.get("type");
+        int requiredAmount = (int) definition.get("amount");
+
+        if ("LEVEL".equalsIgnoreCase(type)) {
+            // Dynamisch: prüfe aktuellen Level
+            int playerLevel = 1;
+            if (plugin.getPlayerDataManager() != null && plugin.getPlayerDataManager().getPlayerData(player.getUniqueId()) != null) {
+                playerLevel = plugin.getPlayerDataManager().getPlayerData(player.getUniqueId()).getLevel();
+            }
+            return playerLevel >= requiredAmount;
+        }
+
+        // Standard: gespeicherter Fortschritt
         UUID uuid = player.getUniqueId();
         Map<String, Integer> achievements = playerAchievements.getOrDefault(uuid, new HashMap<>());
         int currentProgress = achievements.getOrDefault(achievementId, 0);
-        int requiredAmount = (int) achievementDefinitions.get(achievementId).get("amount");
 
         return currentProgress >= requiredAmount;
     }
@@ -625,6 +651,12 @@ public class AchievementManager {
             return false;
         }
 
+        // Debug-Ausgabe
+        if (plugin.isDebugMode()) {
+            Map<String, Boolean> claimed = claimedRewards.getOrDefault(player.getUniqueId(), new HashMap<>());
+            plugin.getLogger().info("[Debug] claimAchievementRewards called for " + player.getName() + ", achievement: " + achievementId + ", completed: " + hasCompletedAchievement(player, achievementId) + ", already claimed: " + claimed.getOrDefault(achievementId, false));
+        }
+
         // Check if achievement is completed
         if (!hasCompletedAchievement(player, achievementId)) {
             return false;
@@ -635,8 +667,13 @@ public class AchievementManager {
 
         // Check if rewards are already claimed
         if (claimed.getOrDefault(achievementId, false)) {
-            player.sendMessage(plugin.getMessageManager().formatMessage("messages.achievements.already-claimed"));
-            return false;
+            // Versuche zuerst die GUI-Nachricht zu verwenden, sonst Fallback
+            String alreadyClaimedMsg = plugin.getMessageManager().getMessage("gui.achievements-claimed", null);
+            if (alreadyClaimedMsg == null || alreadyClaimedMsg.isEmpty()) {
+                alreadyClaimedMsg = plugin.getMessageManager().formatMessage("messages.achievements.claimed");
+            }
+            player.sendMessage(alreadyClaimedMsg);
+            return true;
         }
 
         // Get rewards
@@ -685,7 +722,11 @@ public class AchievementManager {
         claimedRewards.put(uuid, claimed);
 
         // Send message
-        player.sendMessage(plugin.getMessageManager().formatMessage("messages.achievements.claimed"));
+        String claimedMsg = plugin.getMessageManager().getMessage("gui.achievements-claimed", null);
+        if (claimedMsg == null || claimedMsg.isEmpty()) {
+            claimedMsg = plugin.getMessageManager().formatMessage("messages.achievements.claimed");
+        }
+        player.sendMessage(claimedMsg);
 
         return true;
     }
@@ -755,5 +796,102 @@ public class AchievementManager {
     private void sendDiscordWebhook(String webhookUrl, String message) {
         // Implementation for sending Discord webhook
         // This would typically use HttpURLConnection or a library like OkHttp
+    }
+
+    /**
+     * Batch update achievement progress for multiple players
+     * @param updates Map of player UUID to achievement updates
+     */
+    public void batchUpdateAchievements(Map<UUID, Map<String, Integer>> updates) {
+        if (!enabled || updates.isEmpty()) {
+            return;
+        }
+
+        if (plugin.getDatabaseManager() != null && plugin.getDatabaseManager().checkConnection()) {
+            Connection connection = null;
+            PreparedStatement statement = null;
+            
+            try {
+                connection = plugin.getDatabaseManager().getConnection();
+                connection.setAutoCommit(false);
+                
+                String sql = "INSERT INTO " + plugin.getDatabaseManager().getTablePrefix() +
+                        "achievements (uuid, achievement_id, progress, completed, reward_claimed) VALUES (?, ?, ?, ?, ?) " +
+                        "ON DUPLICATE KEY UPDATE progress = VALUES(progress), completed = VALUES(completed)";
+                
+                // SQLite doesn't support ON DUPLICATE KEY UPDATE
+                if (plugin.getDatabaseManager().isFallbackMode()) {
+                    sql = "INSERT OR REPLACE INTO " + plugin.getDatabaseManager().getTablePrefix() +
+                            "achievements (uuid, achievement_id, progress, completed, reward_claimed) VALUES (?, ?, ?, ?, ?)";
+                }
+                
+                statement = connection.prepareStatement(sql);
+                
+                for (Map.Entry<UUID, Map<String, Integer>> playerEntry : updates.entrySet()) {
+                    UUID uuid = playerEntry.getKey();
+                    Map<String, Integer> achievementUpdates = playerEntry.getValue();
+                    
+                    for (Map.Entry<String, Integer> achievementEntry : achievementUpdates.entrySet()) {
+                        String achievementId = achievementEntry.getKey();
+                        int progress = achievementEntry.getValue();
+                        
+                        // Check if achievement is completed
+                        boolean completed = false;
+                        if (achievementDefinitions.containsKey(achievementId)) {
+                            int requiredAmount = (int) achievementDefinitions.get(achievementId).get("amount");
+                            completed = progress >= requiredAmount;
+                        }
+                        
+                        // Check if reward is claimed
+                        Map<String, Boolean> claimed = claimedRewards.getOrDefault(uuid, new HashMap<>());
+                        boolean rewardClaimed = claimed.getOrDefault(achievementId, false);
+                        
+                        statement.setString(1, uuid.toString());
+                        statement.setString(2, achievementId);
+                        statement.setInt(3, progress);
+                        
+                        // Handle boolean values differently for SQLite
+                        if (plugin.getDatabaseManager().isFallbackMode()) {
+                            statement.setInt(4, completed ? 1 : 0);
+                            statement.setInt(5, rewardClaimed ? 1 : 0);
+                        } else {
+                            statement.setBoolean(4, completed);
+                            statement.setBoolean(5, rewardClaimed);
+                        }
+                        
+                        statement.addBatch();
+                    }
+                }
+                
+                statement.executeBatch();
+                connection.commit();
+                
+                if (plugin.isDebugMode()) {
+                    plugin.getLogger().info("[Debug] Batch updated achievements for " + updates.size() + " players");
+                }
+                
+            } catch (SQLException e) {
+                try {
+                    if (connection != null) {
+                        connection.rollback();
+                    }
+                } catch (SQLException rollbackEx) {
+                    plugin.getLogger().warning("Failed to rollback batch achievement update: " + rollbackEx.getMessage());
+                }
+                plugin.getLogger().warning("Failed to batch update achievements: " + e.getMessage());
+                if (plugin.isDebugMode()) {
+                    e.printStackTrace();
+                }
+            } finally {
+                try {
+                    if (connection != null) {
+                        connection.setAutoCommit(true);
+                    }
+                } catch (SQLException e) {
+                    plugin.getLogger().warning("Failed to reset auto-commit: " + e.getMessage());
+                }
+                plugin.getDatabaseManager().closeResources(null, statement, connection);
+            }
+        }
     }
 }

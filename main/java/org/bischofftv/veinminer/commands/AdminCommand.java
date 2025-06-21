@@ -335,38 +335,14 @@ public class AdminCommand implements CommandExecutor, TabCompleter {
 
             // Recreate tables
             plugin.getDatabaseManager().createTables();
-            plugin.getLogger().info("Recreated database tables");
-
+            plugin.getLogger().info("Database repair completed successfully");
             return true;
+
         } catch (SQLException e) {
             plugin.getLogger().severe("Failed to repair database: " + e.getMessage());
-            e.printStackTrace();
             return false;
         } finally {
-            // Close resources
-            if (resultSet != null) {
-                try {
-                    resultSet.close();
-                } catch (SQLException e) {
-                    plugin.getLogger().warning("Failed to close ResultSet: " + e.getMessage());
-                }
-            }
-
-            if (statement != null) {
-                try {
-                    statement.close();
-                } catch (SQLException e) {
-                    plugin.getLogger().warning("Failed to close Statement: " + e.getMessage());
-                }
-            }
-
-            if (connection != null && !plugin.getDatabaseManager().isFallbackMode()) {
-                try {
-                    connection.close();
-                } catch (SQLException e) {
-                    plugin.getLogger().warning("Failed to close Connection: " + e.getMessage());
-                }
-            }
+            plugin.getDatabaseManager().closeResources(resultSet, statement, connection);
         }
     }
 }

@@ -94,7 +94,7 @@ public class DatabaseManager {
         config.addDataSourceProperty("useServerPrepStmts", "true");
         
         // Verbesserte Fehlerbehandlung
-        config.setLeakDetectionThreshold(30000); // 30 Sekunden
+        config.setLeakDetectionThreshold(60000); // 60 Sekunden (erhöht von 30)
         config.setConnectionTestQuery("SELECT 1");
         
         // Server-spezifische Einstellungen

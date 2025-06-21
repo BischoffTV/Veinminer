@@ -21,6 +21,9 @@ settings:
   # Whether to check for updates
   check-for-updates: true
 
+  # Whether to save player data immediately on quit (true = Data protection, false = only Batch/Auto-Save)
+  save-on-quit: true
+
 # WorldGuard integration
 worldguard:
   # Whether to respect WorldGuard regions

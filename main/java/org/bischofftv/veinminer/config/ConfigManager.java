@@ -156,4 +156,8 @@ public class ConfigManager {
             plugin.getLogger().info("- " + material.name());
         }
     }
+
+    public boolean isSaveOnQuit() {
+        return config.getBoolean("settings.save-on-quit", true);
+    }
 }

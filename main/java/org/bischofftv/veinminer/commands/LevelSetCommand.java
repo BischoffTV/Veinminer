@@ -67,6 +67,20 @@ public class LevelSetCommand implements CommandExecutor, TabCompleter {
         PlayerData playerData = plugin.getPlayerDataManager().getPlayerData(targetPlayer.getUniqueId());
         if (playerData != null) {
             playerData.setLevel(level);
+            // XP für das gesetzte Level aus der Config setzen
+            int xpForLevel = 0;
+            try {
+                Object levelManager = plugin.getLevelManager();
+                java.lang.reflect.Field xpPerLevelField = levelManager.getClass().getDeclaredField("xpPerLevel");
+                xpPerLevelField.setAccessible(true);
+                java.util.Map xpPerLevel = (java.util.Map) xpPerLevelField.get(levelManager);
+                if (xpPerLevel.containsKey(level)) {
+                    xpForLevel = (int) xpPerLevel.get(level);
+                }
+            } catch (Exception e) {
+                // Fallback: XP bleibt 0
+            }
+            playerData.setExperience(xpForLevel);
 
             // Send messages
             sender.sendMessage(plugin.getMessageManager().formatMessage("messages.level.set",

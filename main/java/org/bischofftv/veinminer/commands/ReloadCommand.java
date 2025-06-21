@@ -27,6 +27,7 @@ public class ReloadCommand implements CommandExecutor, TabCompleter {
 
         // Reload the plugin configuration
         plugin.reloadConfig();
+        plugin.reloadLangConfig();
         plugin.getMessageManager().reload();
         plugin.getConfigManager().loadConfig();
         plugin.getLevelManager().loadConfig();

@@ -302,29 +302,32 @@ public class TopPlayersGUI {
     private List<TopPlayerData> getTopPlayersByLevel(int limit) {
         List<TopPlayerData> topPlayers = new ArrayList<>();
 
+        Connection connection = null;
+        PreparedStatement statement = null;
+        ResultSet resultSet = null;
+
         try {
-            Connection connection = plugin.getDatabaseManager().getConnection();
+            connection = plugin.getDatabaseManager().getConnection();
             if (connection == null) {
                 return topPlayers;
             }
 
             String sql = "SELECT player_name, level FROM " + plugin.getDatabaseManager().getTablePrefix() +
                     "player_data ORDER BY level DESC, experience DESC LIMIT ?";
-            PreparedStatement statement = connection.prepareStatement(sql);
+            statement = connection.prepareStatement(sql);
             statement.setInt(1, limit);
 
-            ResultSet resultSet = statement.executeQuery();
+            resultSet = statement.executeQuery();
             while (resultSet.next()) {
                 String playerName = resultSet.getString("player_name");
                 int level = resultSet.getInt("level");
 
                 topPlayers.add(new TopPlayerData(playerName, level));
             }
-
-            resultSet.close();
-            statement.close();
         } catch (SQLException e) {
             plugin.getLogger().warning("Failed to get top players by level: " + e.getMessage());
+        } finally {
+            plugin.getDatabaseManager().closeResources(resultSet, statement, connection);
         }
 
         return topPlayers;
@@ -338,8 +341,12 @@ public class TopPlayersGUI {
     private List<TopPlayerData> getTopPlayersByAchievements(int limit) {
         List<TopPlayerData> topPlayers = new ArrayList<>();
 
+        Connection connection = null;
+        PreparedStatement statement = null;
+        ResultSet resultSet = null;
+
         try {
-            Connection connection = plugin.getDatabaseManager().getConnection();
+            connection = plugin.getDatabaseManager().getConnection();
             if (connection == null) {
                 return topPlayers;
             }
@@ -351,21 +358,20 @@ public class TopPlayersGUI {
                     "GROUP BY a.uuid, p.player_name " +
                     "ORDER BY completed_count DESC LIMIT ?";
 
-            PreparedStatement statement = connection.prepareStatement(sql);
+            statement = connection.prepareStatement(sql);
             statement.setInt(1, limit);
 
-            ResultSet resultSet = statement.executeQuery();
+            resultSet = statement.executeQuery();
             while (resultSet.next()) {
                 String playerName = resultSet.getString("player_name");
                 int completedCount = resultSet.getInt("completed_count");
 
                 topPlayers.add(new TopPlayerData(playerName, completedCount));
             }
-
-            resultSet.close();
-            statement.close();
         } catch (SQLException e) {
             plugin.getLogger().warning("Failed to get top players by achievements: " + e.getMessage());
+        } finally {
+            plugin.getDatabaseManager().closeResources(resultSet, statement, connection);
         }
 
         return topPlayers;
@@ -379,29 +385,32 @@ public class TopPlayersGUI {
     private List<TopPlayerData> getTopPlayersByBlocksMined(int limit) {
         List<TopPlayerData> topPlayers = new ArrayList<>();
 
+        Connection connection = null;
+        PreparedStatement statement = null;
+        ResultSet resultSet = null;
+
         try {
-            Connection connection = plugin.getDatabaseManager().getConnection();
+            connection = plugin.getDatabaseManager().getConnection();
             if (connection == null) {
                 return topPlayers;
             }
 
             String sql = "SELECT player_name, blocks_mined FROM " + plugin.getDatabaseManager().getTablePrefix() +
                     "player_data ORDER BY blocks_mined DESC LIMIT ?";
-            PreparedStatement statement = connection.prepareStatement(sql);
+            statement = connection.prepareStatement(sql);
             statement.setInt(1, limit);
 
-            ResultSet resultSet = statement.executeQuery();
+            resultSet = statement.executeQuery();
             while (resultSet.next()) {
                 String playerName = resultSet.getString("player_name");
                 int blocksMined = resultSet.getInt("blocks_mined");
 
                 topPlayers.add(new TopPlayerData(playerName, blocksMined));
             }
-
-            resultSet.close();
-            statement.close();
         } catch (SQLException e) {
             plugin.getLogger().warning("Failed to get top players by blocks mined: " + e.getMessage());
+        } finally {
+            plugin.getDatabaseManager().closeResources(resultSet, statement, connection);
         }
 
         return topPlayers;
