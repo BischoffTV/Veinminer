@@ -164,31 +164,77 @@ public class BlockBreakListener implements Listener {
             return;
         }
 
-        // Check adjacent blocks (including diagonals)
-        for (int x = -1; x <= 1; x++) {
-            for (int y = -1; y <= 1; y++) {
-                for (int z = -1; z <= 1; z++) {
-                    // Skip the center block
-                    if (x == 0 && y == 0 && z == 0) {
-                        continue;
+        // Check if hybrid mode is enabled and if this block type is in the blacklist
+        boolean hybridMode = plugin.getConfig().getBoolean("settings.hybrid-mode", false);
+        List<String> hybridBlacklist = plugin.getConfig().getStringList("settings.hybrid-blacklist");
+        boolean useDirectOnly = hybridBlacklist.contains(material.toString());
+
+        // Debug logging
+        if (plugin.isDebugMode()) {
+            plugin.getLogger().info("[Debug] VeinMiner mode for " + material + ": " + 
+                (hybridMode && !useDirectOnly ? "HYBRID (diagonal + direct)" : "DIRECT (direct only)") +
+                (useDirectOnly ? " (blacklisted)" : ""));
+        }
+
+        // Determine which blocks to check based on mode
+        if (hybridMode && !useDirectOnly) {
+            // Hybrid mode: check all adjacent blocks (including diagonals)
+            for (int x = -1; x <= 1; x++) {
+                for (int y = -1; y <= 1; y++) {
+                    for (int z = -1; z <= 1; z++) {
+                        // Skip the center block
+                        if (x == 0 && y == 0 && z == 0) {
+                            continue;
+                        }
+
+                        Block adjacentBlock = startBlock.getRelative(x, y, z);
+
+                        // Skip if already checked
+                        if (checkedBlocks.contains(adjacentBlock)) {
+                            continue;
+                        }
+
+                        checkedBlocks.add(adjacentBlock);
+
+                        // Check if it's the same material
+                        if (adjacentBlock.getType() == material) {
+                            blocksToBreak.add(adjacentBlock);
+
+                            // Recursively check adjacent blocks
+                            if (blocksToBreak.size() < maxBlocks) {
+                                findConnectedBlocks(adjacentBlock, material, blocksToBreak, checkedBlocks, maxBlocks);
+                            }
+                        }
                     }
+                }
+            }
+        } else {
+            // Direct mode: check only direct adjacent blocks (no diagonals)
+            for (int x = -1; x <= 1; x++) {
+                for (int y = -1; y <= 1; y++) {
+                    for (int z = -1; z <= 1; z++) {
+                        // Skip diagonals and the center block
+                        if (Math.abs(x) + Math.abs(y) + Math.abs(z) != 1) {
+                            continue;
+                        }
 
-                    Block adjacentBlock = startBlock.getRelative(x, y, z);
+                        Block adjacentBlock = startBlock.getRelative(x, y, z);
 
-                    // Skip if already checked
-                    if (checkedBlocks.contains(adjacentBlock)) {
-                        continue;
-                    }
+                        // Skip if already checked
+                        if (checkedBlocks.contains(adjacentBlock)) {
+                            continue;
+                        }
 
-                    checkedBlocks.add(adjacentBlock);
+                        checkedBlocks.add(adjacentBlock);
 
-                    // Check if it's the same material
-                    if (adjacentBlock.getType() == material) {
-                        blocksToBreak.add(adjacentBlock);
+                        // Check if it's the same material
+                        if (adjacentBlock.getType() == material) {
+                            blocksToBreak.add(adjacentBlock);
 
-                        // Recursively check adjacent blocks
-                        if (blocksToBreak.size() < maxBlocks) {
-                            findConnectedBlocks(adjacentBlock, material, blocksToBreak, checkedBlocks, maxBlocks);
+                            // Recursively check adjacent blocks
+                            if (blocksToBreak.size() < maxBlocks) {
+                                findConnectedBlocks(adjacentBlock, material, blocksToBreak, checkedBlocks, maxBlocks);
+                            }
                         }
                     }
                 }

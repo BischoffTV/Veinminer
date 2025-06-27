@@ -80,6 +80,35 @@ VeinMiner is highly configurable:
   - Configure command permissions
   - Customize permission nodes for different features
 
+## Automatic Config Updater
+
+**Never worry about missing or outdated config options again!**
+
+Whenever the plugin starts, VeinMiner automatically checks your `config.yml` for all important options. If any required option is missing (for example, after an update or if something was accidentally deleted), it will be added back with a safe default value—**without overwriting your existing settings**.
+
+- Works with all supported and legacy config versions
+- Only missing options are added; your customizations remain untouched
+- All changes are clearly shown in the server log with prominent warnings and a summary
+- Ensures maximum compatibility and prevents plugin errors due to incomplete configs
+
+**Example log output:**
+```
+[WARNING] [CONFIG UPDATER] Added missing config option: settings.hybrid-mode = false
+[WARNING] [CONFIG UPDATER] Added missing config option: settings.hybrid-blacklist with default tree/leaves blocks
+[SEVERE] ------------------------------------------------------------
+[SEVERE] !!! CONFIG UPDATER: Configuration has been updated !!!
+[SEVERE] !!! Missing options have been added with default values. !!!
+[SEVERE] !!! Please review your config.yml file for the new settings. !!!
+[SEVERE] !!! Check the logs above for details on what was added. !!!
+[SEVERE] ------------------------------------------------------------
+```
+If your config is already complete, you'll see:
+```
+[INFO] [CONFIG UPDATER] All configuration options are present and up to date.
+```
+
+This makes updating and maintaining your server configuration effortless and safe!
+
 ## 🛡️ WorldGuard Integration
 
 VeinMiner offers seamless integration with WorldGuard:
@@ -120,3 +149,8 @@ If you encounter any issues or have suggestions, please visit our GitHub reposit
 - Enhanced GUI features
 - Performance optimizations
 - And more based on your feedback!
+- Language packs for easy translation and community-contributed localizations
+- Extended API for developers and addon support
+- Automatic backups of config and database
+- Custom mining events (competitions, challenges, seasonal events)
+- Fast compatibility updates for new Minecraft versions

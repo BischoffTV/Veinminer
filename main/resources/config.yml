@@ -24,6 +24,33 @@ settings:
   # Whether to save player data immediately on quit (true = Data protection, false = only Batch/Auto-Save)
   save-on-quit: true
 
+  # Hybrid mode: true = diagonal + direct connections, false = only direct connections
+  hybrid-mode: false
+
+  # Blocks that should only use direct mode (even when hybrid is enabled)
+  hybrid-blacklist:
+    - "OAK_LOG"
+    - "BIRCH_LOG" 
+    - "SPRUCE_LOG"
+    - "JUNGLE_LOG"
+    - "ACACIA_LOG"
+    - "DARK_OAK_LOG"
+    - "MANGROVE_LOG"
+    - "CHERRY_LOG"
+    - "CRIMSON_STEM"
+    - "WARPED_STEM"
+    - "LEAVES"
+    - "OAK_LEAVES"
+    - "BIRCH_LEAVES"
+    - "SPRUCE_LEAVES"
+    - "JUNGLE_LEAVES"
+    - "ACACIA_LEAVES"
+    - "DARK_OAK_LEAVES"
+    - "MANGROVE_LEAVES"
+    - "CHERRY_LEAVES"
+    - "AZALEA_LEAVES"
+    - "FLOWERING_AZALEA_LEAVES"
+
 # WorldGuard integration
 worldguard:
   # Whether to respect WorldGuard regions

@@ -30,6 +30,8 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.util.Arrays;
+import java.util.List;
 
 public class Veinminer extends JavaPlugin {
 
@@ -119,8 +121,12 @@ public class Veinminer extends JavaPlugin {
 
     @Override
     public void onEnable() {
-        // Save default config if it doesn't exist
+        // Load configuration
         saveDefaultConfig();
+        reloadConfig();
+
+        // Update config with new options if needed
+        updateConfig();
 
         // Print the plugin version
         getLogger().info("Enabling Veinminer v" + getDescription().getVersion());
@@ -664,7 +670,9 @@ public class Veinminer extends JavaPlugin {
         }
     }
 
-    // Update database schema if needed
+    /**
+     * Update database schema if needed
+     */
     private void updateDatabaseSchema() {
         if (databaseManager != null && !databaseManager.isFallbackMode()) {
             try {
@@ -673,6 +681,249 @@ public class Veinminer extends JavaPlugin {
             } catch (Exception e) {
                 getLogger().severe("Failed to update database schema: " + e.getMessage());
             }
+        }
+    }
+
+    /**
+     * Update configuration with new options if needed
+     */
+    private void updateConfig() {
+        boolean configUpdated = false;
+        
+        // Settings section
+        if (!getConfig().isSet("settings.max-blocks")) {
+            getConfig().set("settings.max-blocks", 64);
+            getLogger().warning("[CONFIG UPDATER] Added missing config option: settings.max-blocks = 64");
+            configUpdated = true;
+        }
+        if (!getConfig().isSet("settings.use-durability-multiplier")) {
+            getConfig().set("settings.use-durability-multiplier", true);
+            getLogger().warning("[CONFIG UPDATER] Added missing config option: settings.use-durability-multiplier = true");
+            configUpdated = true;
+        }
+        if (!getConfig().isSet("settings.durability-multiplier")) {
+            getConfig().set("settings.durability-multiplier", 1.0);
+            getLogger().warning("[CONFIG UPDATER] Added missing config option: settings.durability-multiplier = 1.0");
+            configUpdated = true;
+        }
+        if (!getConfig().isSet("settings.use-hunger-multiplier")) {
+            getConfig().set("settings.use-hunger-multiplier", true);
+            getLogger().warning("[CONFIG UPDATER] Added missing config option: settings.use-hunger-multiplier = true");
+            configUpdated = true;
+        }
+        if (!getConfig().isSet("settings.hunger-multiplier")) {
+            getConfig().set("settings.hunger-multiplier", 0.1);
+            getLogger().warning("[CONFIG UPDATER] Added missing config option: settings.hunger-multiplier = 0.1");
+            configUpdated = true;
+        }
+        if (!getConfig().isSet("settings.debug")) {
+            getConfig().set("settings.debug", false);
+            getLogger().warning("[CONFIG UPDATER] Added missing config option: settings.debug = false");
+            configUpdated = true;
+        }
+        if (!getConfig().isSet("settings.auto-save-interval")) {
+            getConfig().set("settings.auto-save-interval", 15);
+            getLogger().warning("[CONFIG UPDATER] Added missing config option: settings.auto-save-interval = 15");
+            configUpdated = true;
+        }
+        if (!getConfig().isSet("settings.check-for-updates")) {
+            getConfig().set("settings.check-for-updates", true);
+            getLogger().warning("[CONFIG UPDATER] Added missing config option: settings.check-for-updates = true");
+            configUpdated = true;
+        }
+        if (!getConfig().isSet("settings.save-on-quit")) {
+            getConfig().set("settings.save-on-quit", true);
+            getLogger().warning("[CONFIG UPDATER] Added missing config option: settings.save-on-quit = true");
+            configUpdated = true;
+        }
+        // Hybrid mode options
+        if (!getConfig().isSet("settings.hybrid-mode")) {
+            getConfig().set("settings.hybrid-mode", false);
+            getLogger().warning("[CONFIG UPDATER] Added missing config option: settings.hybrid-mode = false");
+            configUpdated = true;
+        }
+        if (!getConfig().isSet("settings.hybrid-blacklist")) {
+            List<String> defaultBlacklist = Arrays.asList(
+                "OAK_LOG", "BIRCH_LOG", "SPRUCE_LOG", "JUNGLE_LOG", 
+                "ACACIA_LOG", "DARK_OAK_LOG", "MANGROVE_LOG", "CHERRY_LOG",
+                "CRIMSON_STEM", "WARPED_STEM", "LEAVES", "OAK_LEAVES",
+                "BIRCH_LEAVES", "SPRUCE_LEAVES", "JUNGLE_LEAVES", 
+                "ACACIA_LEAVES", "DARK_OAK_LEAVES", "MANGROVE_LEAVES",
+                "CHERRY_LEAVES", "AZALEA_LEAVES", "FLOWERING_AZALEA_LEAVES"
+            );
+            getConfig().set("settings.hybrid-blacklist", defaultBlacklist);
+            getLogger().warning("[CONFIG UPDATER] Added missing config option: settings.hybrid-blacklist with default tree/leaves blocks");
+            configUpdated = true;
+        }
+        // WorldGuard section
+        if (!getConfig().isSet("worldguard.enabled")) {
+            getConfig().set("worldguard.enabled", true);
+            getLogger().warning("[CONFIG UPDATER] Added missing config option: worldguard.enabled = true");
+            configUpdated = true;
+        }
+        if (!getConfig().isSet("worldguard.debug")) {
+            getConfig().set("worldguard.debug", false);
+            getLogger().warning("[CONFIG UPDATER] Added missing config option: worldguard.debug = false");
+            configUpdated = true;
+        }
+        // Skill system section
+        if (!getConfig().isSet("skill-system.enabled")) {
+            getConfig().set("skill-system.enabled", true);
+            getLogger().warning("[CONFIG UPDATER] Added missing config option: skill-system.enabled = true");
+            configUpdated = true;
+        }
+        if (!getConfig().isSet("skill-system.max-skill-level")) {
+            getConfig().set("skill-system.max-skill-level", 5);
+            getLogger().warning("[CONFIG UPDATER] Added missing config option: skill-system.max-skill-level = 5");
+            configUpdated = true;
+        }
+        // Reset section
+        if (!getConfig().isSet("reset.cost-enabled")) {
+            getConfig().set("reset.cost-enabled", true);
+            getLogger().warning("[CONFIG UPDATER] Added missing config option: reset.cost-enabled = true");
+            configUpdated = true;
+        }
+        if (!getConfig().isSet("reset.cost")) {
+            getConfig().set("reset.cost", 1000.0);
+            getLogger().warning("[CONFIG UPDATER] Added missing config option: reset.cost = 1000.0");
+            configUpdated = true;
+        }
+        if (!getConfig().isSet("reset.command")) {
+            getConfig().set("reset.command", "eco take %player% %amount%");
+            getLogger().warning("[CONFIG UPDATER] Added missing config option: reset.command = 'eco take %player% %amount%'");
+            configUpdated = true;
+        }
+        // Achievement system section
+        if (!getConfig().isSet("achievement-system.enabled")) {
+            getConfig().set("achievement-system.enabled", true);
+            getLogger().warning("[CONFIG UPDATER] Added missing config option: achievement-system.enabled = true");
+            configUpdated = true;
+        }
+        // Database section
+        if (!getConfig().isSet("database.name")) {
+            getConfig().set("database.name", "veinminer");
+            getLogger().warning("[CONFIG UPDATER] Added missing config option: database.name = 'veinminer'");
+            configUpdated = true;
+        }
+        if (!getConfig().isSet("database.use-mysql")) {
+            getConfig().set("database.use-mysql", false);
+            getLogger().warning("[CONFIG UPDATER] Added missing config option: database.use-mysql = false");
+            configUpdated = true;
+        }
+        if (!getConfig().isSet("database.host")) {
+            getConfig().set("database.host", "localhost");
+            getLogger().warning("[CONFIG UPDATER] Added missing config option: database.host = 'localhost'");
+            configUpdated = true;
+        }
+        if (!getConfig().isSet("database.port")) {
+            getConfig().set("database.port", 3306);
+            getLogger().warning("[CONFIG UPDATER] Added missing config option: database.port = 3306");
+            configUpdated = true;
+        }
+        if (!getConfig().isSet("database.username")) {
+            getConfig().set("database.username", "root");
+            getLogger().warning("[CONFIG UPDATER] Added missing config option: database.username = 'root'");
+            configUpdated = true;
+        }
+        if (!getConfig().isSet("database.password")) {
+            getConfig().set("database.password", "test");
+            getLogger().warning("[CONFIG UPDATER] Added missing config option: database.password = 'test'");
+            configUpdated = true;
+        }
+        if (!getConfig().isSet("database.table-prefix")) {
+            getConfig().set("database.table-prefix", "vm_");
+            getLogger().warning("[CONFIG UPDATER] Added missing config option: database.table-prefix = 'vm_'");
+            configUpdated = true;
+        }
+        if (!getConfig().isSet("database.reduce-logging")) {
+            getConfig().set("database.reduce-logging", true);
+            getLogger().warning("[CONFIG UPDATER] Added missing config option: database.reduce-logging = true");
+            configUpdated = true;
+        }
+        // Database pool settings
+        if (!getConfig().isSet("database.pool.max-pool-size")) {
+            getConfig().set("database.pool.max-pool-size", 10);
+            getLogger().warning("[CONFIG UPDATER] Added missing config option: database.pool.max-pool-size = 10");
+            configUpdated = true;
+        }
+        if (!getConfig().isSet("database.pool.min-idle")) {
+            getConfig().set("database.pool.min-idle", 2);
+            getLogger().warning("[CONFIG UPDATER] Added missing config option: database.pool.min-idle = 2");
+            configUpdated = true;
+        }
+        if (!getConfig().isSet("database.pool.max-lifetime")) {
+            getConfig().set("database.pool.max-lifetime", 600000);
+            getLogger().warning("[CONFIG UPDATER] Added missing config option: database.pool.max-lifetime = 600000");
+            configUpdated = true;
+        }
+        if (!getConfig().isSet("database.pool.connection-timeout")) {
+            getConfig().set("database.pool.connection-timeout", 30000);
+            getLogger().warning("[CONFIG UPDATER] Added missing config option: database.pool.connection-timeout = 30000");
+            configUpdated = true;
+        }
+        if (!getConfig().isSet("database.pool.idle-timeout")) {
+            getConfig().set("database.pool.idle-timeout", 300000);
+            getLogger().warning("[CONFIG UPDATER] Added missing config option: database.pool.idle-timeout = 300000");
+            configUpdated = true;
+        }
+        if (!getConfig().isSet("database.pool.wait-timeout")) {
+            getConfig().set("database.pool.wait-timeout", 10000);
+            getLogger().warning("[CONFIG UPDATER] Added missing config option: database.pool.wait-timeout = 10000");
+            configUpdated = true;
+        }
+        // GUI section
+        if (!getConfig().isSet("gui.show-about")) {
+            getConfig().set("gui.show-about", true);
+            getLogger().warning("[CONFIG UPDATER] Added missing config option: gui.show-about = true");
+            configUpdated = true;
+        }
+        if (!getConfig().isSet("gui.show-top-players")) {
+            getConfig().set("gui.show-top-players", true);
+            getLogger().warning("[CONFIG UPDATER] Added missing config option: gui.show-top-players = true");
+            configUpdated = true;
+        }
+        if (!getConfig().isSet("gui.top-players-refresh-interval")) {
+            getConfig().set("gui.top-players-refresh-interval", 5);
+            getLogger().warning("[CONFIG UPDATER] Added missing config option: gui.top-players-refresh-interval = 5");
+            configUpdated = true;
+        }
+        // Permissions section
+        if (!getConfig().isSet("permissions.require-permission")) {
+            getConfig().set("permissions.require-permission", false);
+            getLogger().warning("[CONFIG UPDATER] Added missing config option: permissions.require-permission = false");
+            configUpdated = true;
+        }
+        if (!getConfig().isSet("permissions.require-tool-permission")) {
+            getConfig().set("permissions.require-tool-permission", false);
+            getLogger().warning("[CONFIG UPDATER] Added missing config option: permissions.require-tool-permission = false");
+            configUpdated = true;
+        }
+        // Check if allowed-blocks section exists, if not add default blocks
+        if (!getConfig().isSet("allowed-blocks") || getConfig().getStringList("allowed-blocks").isEmpty()) {
+            List<String> defaultBlocks = Arrays.asList(
+                "COAL_ORE", "DEEPSLATE_COAL_ORE", "IRON_ORE", "DEEPSLATE_IRON_ORE",
+                "COPPER_ORE", "DEEPSLATE_COPPER_ORE", "GOLD_ORE", "DEEPSLATE_GOLD_ORE",
+                "REDSTONE_ORE", "DEEPSLATE_REDSTONE_ORE", "DIAMOND_ORE", "DEEPSLATE_DIAMOND_ORE",
+                "LAPIS_ORE", "DEEPSLATE_LAPIS_ORE", "EMERALD_ORE", "DEEPSLATE_EMERALD_ORE",
+                "NETHER_GOLD_ORE", "NETHER_QUARTZ_ORE", "ANCIENT_DEBRIS",
+                "OAK_LOG", "BIRCH_LOG", "SPRUCE_LOG", "JUNGLE_LOG", "ACACIA_LOG", "DARK_OAK_LOG",
+                "MANGROVE_LOG", "CHERRY_LOG", "CRIMSON_STEM", "WARPED_STEM"
+            );
+            getConfig().set("allowed-blocks", defaultBlocks);
+            getLogger().warning("[CONFIG UPDATER] Added missing config option: allowed-blocks with default ore and log blocks");
+            configUpdated = true;
+        }
+        // Save config if any updates were made
+        if (configUpdated) {
+            saveConfig();
+            getLogger().severe("------------------------------------------------------------");
+            getLogger().severe("!!! CONFIG UPDATER: Configuration has been updated !!!");
+            getLogger().severe("!!! Missing options have been added with default values. !!!");
+            getLogger().severe("!!! Please review your config.yml file for the new settings. !!!");
+            getLogger().severe("!!! Check the logs above for details on what was added. !!!");
+            getLogger().severe("------------------------------------------------------------");
+        } else {
+            getLogger().info("[CONFIG UPDATER] All configuration options are present and up to date.");
         }
     }
 
