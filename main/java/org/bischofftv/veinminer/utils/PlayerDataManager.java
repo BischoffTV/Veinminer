@@ -32,11 +32,15 @@ public class PlayerDataManager {
 
         // Check if player data is already loaded
         if (playerDataMap.containsKey(uuid)) {
-            plugin.getLogger().info("[DEBUG] Player data for " + playerName + " is already loaded in memory.");
+            if (plugin.isDebugMode()) {
+                plugin.getLogger().info("[DEBUG] Player data for " + playerName + " is already loaded in memory.");
+            }
             PlayerData existingData = playerDataMap.get(uuid);
-            plugin.getLogger().info("[DEBUG] Memory data: Level=" + existingData.getLevel() +
-                    ", XP=" + existingData.getExperience() +
-                    ", Blocks=" + existingData.getBlocksMined());
+            if (plugin.isDebugMode()) {
+                plugin.getLogger().info("[DEBUG] Memory data: Level=" + existingData.getLevel() +
+                        ", XP=" + existingData.getExperience() +
+                        ", Blocks=" + existingData.getBlocksMined());
+            }
             return;
         }
 
@@ -63,11 +67,15 @@ public class PlayerDataManager {
                 long endTime = System.currentTimeMillis();
 
                 if (endTime - startTime > 1000) {
-                    plugin.getLogger().warning("[DEBUG] Slow connection acquisition for " + playerName + ": " + (endTime - startTime) + "ms");
+                    if (plugin.isDebugMode()) {
+                        plugin.getLogger().warning("[DEBUG] Slow connection acquisition for " + playerName + ": " + (endTime - startTime) + "ms");
+                    }
                 }
 
                 if (connection == null) {
-                    plugin.getLogger().warning("[DEBUG] Failed to get database connection when loading player data for " + playerName);
+                    if (plugin.isDebugMode()) {
+                        plugin.getLogger().warning("[DEBUG] Failed to get database connection when loading player data for " + playerName);
+                    }
                     playerDataMap.put(uuid, playerData);
                     return;
                 }
@@ -76,7 +84,9 @@ public class PlayerDataManager {
                 statement = connection.prepareStatement(sql);
                 statement.setString(1, uuid.toString());
 
-                plugin.getLogger().info("[DEBUG] Executing SQL query to load player data for " + playerName);
+                if (plugin.isDebugMode()) {
+                    plugin.getLogger().info("[DEBUG] Executing SQL query to load player data for " + playerName);
+                }
                 resultSet = statement.executeQuery();
                 if (resultSet.next()) {
                     playerData.setVeinMinerEnabled(resultSet.getBoolean("veinminer_enabled"));
@@ -95,12 +105,16 @@ public class PlayerDataManager {
                     playerData.setToolEnabled("hoe", resultSet.getBoolean("hoe_enabled"));
 
                     // Add debug logging
-                    plugin.getLogger().info("[DEBUG] Loaded player data from database for " + playerName +
-                            ": Level=" + playerData.getLevel() +
-                            ", XP=" + playerData.getExperience() +
-                            ", Blocks=" + playerData.getBlocksMined());
+                    if (plugin.isDebugMode()) {
+                        plugin.getLogger().info("[DEBUG] Loaded player data from database for " + playerName +
+                                ": Level=" + playerData.getLevel() +
+                                ", XP=" + playerData.getExperience() +
+                                ", Blocks=" + playerData.getBlocksMined());
+                    }
                 } else {
-                    plugin.getLogger().info("[DEBUG] No existing data found in database for " + playerName + ", creating new entry");
+                    if (plugin.isDebugMode()) {
+                        plugin.getLogger().info("[DEBUG] No existing data found in database for " + playerName + ", creating new entry");
+                    }
 
                     // Insert new player data
                     PreparedStatement insertStatement = null;
@@ -128,31 +142,41 @@ public class PlayerDataManager {
                         insertStatement.setBoolean(14, playerData.isToolEnabled("hoe"));
 
                         insertStatement.executeUpdate();
-                        plugin.getLogger().info("[DEBUG] Created new player data in database for " + playerName);
+                        if (plugin.isDebugMode()) {
+                            plugin.getLogger().info("[DEBUG] Created new player data in database for " + playerName);
+                        }
                     } finally {
                         if (insertStatement != null) {
                             try {
                                 insertStatement.close();
                             } catch (SQLException e) {
-                                plugin.getLogger().warning("Failed to close insert statement: " + e.getMessage());
+                                if (plugin.isDebugMode()) {
+                                    plugin.getLogger().warning("Failed to close insert statement: " + e.getMessage());
+                                }
                             }
                         }
                     }
                 }
             } catch (SQLException e) {
-                plugin.getLogger().warning("Failed to load player data for " + playerName + ": " + e.getMessage());
+                if (plugin.isDebugMode()) {
+                    plugin.getLogger().warning("Failed to load player data for " + playerName + ": " + e.getMessage());
+                }
                 e.printStackTrace();
             } finally {
                 // Verwende die closeResources-Methode des DatabaseManagers
                 plugin.getDatabaseManager().closeResources(resultSet, statement, connection);
             }
         } else {
-            plugin.getLogger().warning("[DEBUG] Database connection not available when loading player data for " + playerName);
+            if (plugin.isDebugMode()) {
+                plugin.getLogger().warning("[DEBUG] Database connection not available when loading player data for " + playerName);
+            }
         }
 
         // Add to map
         playerDataMap.put(uuid, playerData);
-        plugin.getLogger().info("[DEBUG] Added player data to memory map for " + playerName);
+        if (plugin.isDebugMode()) {
+            plugin.getLogger().info("[DEBUG] Added player data to memory map for " + playerName);
+        }
     }
 
     /**
@@ -162,14 +186,18 @@ public class PlayerDataManager {
     public void savePlayerData(UUID uuid) {
         PlayerData playerData = playerDataMap.get(uuid);
         if (playerData == null) {
-            plugin.getLogger().warning("[DEBUG] Cannot save player data: No data found in memory for UUID " + uuid);
+            if (plugin.isDebugMode()) {
+                plugin.getLogger().warning("[DEBUG] Cannot save player data: No data found in memory for UUID " + uuid);
+            }
             return;
         }
 
-        plugin.getLogger().info("[DEBUG] Saving player data for " + playerData.getPlayerName() +
-                ": Level=" + playerData.getLevel() +
-                ", XP=" + playerData.getExperience() +
-                ", Blocks=" + playerData.getBlocksMined());
+        if (plugin.isDebugMode()) {
+            plugin.getLogger().info("[DEBUG] Saving player data for " + playerData.getPlayerName() +
+                    ": Level=" + playerData.getLevel() +
+                    ", XP=" + playerData.getExperience() +
+                    ", Blocks=" + playerData.getBlocksMined());
+        }
 
         if (plugin.getDatabaseManager() != null && plugin.getDatabaseManager().isConnectionValid()) {
             Connection connection = null;
@@ -182,11 +210,15 @@ public class PlayerDataManager {
                 long endTime = System.currentTimeMillis();
 
                 if (endTime - startTime > 1000) {
-                    plugin.getLogger().warning("[DEBUG] Slow connection acquisition for " + playerData.getPlayerName() + ": " + (endTime - startTime) + "ms");
+                    if (plugin.isDebugMode()) {
+                        plugin.getLogger().warning("[DEBUG] Slow connection acquisition for " + playerData.getPlayerName() + ": " + (endTime - startTime) + "ms");
+                    }
                 }
 
                 if (connection == null) {
-                    plugin.getLogger().warning("[DEBUG] Failed to get database connection when saving player data for " + playerData.getPlayerName());
+                    if (plugin.isDebugMode()) {
+                        plugin.getLogger().warning("[DEBUG] Failed to get database connection when saving player data for " + playerData.getPlayerName());
+                    }
                     return;
                 }
 
@@ -213,17 +245,23 @@ public class PlayerDataManager {
                 statement.setString(14, uuid.toString());
 
                 int rowsUpdated = statement.executeUpdate();
-                plugin.getLogger().info("[DEBUG] Saved player data to database for " + playerData.getPlayerName() +
-                        ", rows updated: " + rowsUpdated);
+                if (plugin.isDebugMode()) {
+                    plugin.getLogger().info("[DEBUG] Saved player data to database for " + playerData.getPlayerName() +
+                            ", rows updated: " + rowsUpdated);
+                }
             } catch (SQLException e) {
-                plugin.getLogger().warning("Failed to save player data for " + playerData.getPlayerName() + ": " + e.getMessage());
+                if (plugin.isDebugMode()) {
+                    plugin.getLogger().warning("Failed to save player data for " + playerData.getPlayerName() + ": " + e.getMessage());
+                }
                 e.printStackTrace();
             } finally {
                 // Verwende die closeResources-Methode des DatabaseManagers
                 plugin.getDatabaseManager().closeResources(null, statement, connection);
             }
         } else {
-            plugin.getLogger().warning("[DEBUG] Database connection not available when saving player data for " + playerData.getPlayerName());
+            if (plugin.isDebugMode()) {
+                plugin.getLogger().warning("[DEBUG] Database connection not available when saving player data for " + playerData.getPlayerName());
+            }
         }
     }
 
@@ -231,7 +269,9 @@ public class PlayerDataManager {
      * Save all player data to the database
      */
     public void saveAllData() {
-        plugin.getLogger().info("[DEBUG] Saving all player data, count: " + playerDataMap.size());
+        if (plugin.isDebugMode()) {
+            plugin.getLogger().info("[DEBUG] Saving all player data, count: " + playerDataMap.size());
+        }
         for (UUID uuid : playerDataMap.keySet()) {
             savePlayerData(uuid);
         }
@@ -244,7 +284,9 @@ public class PlayerDataManager {
     public void removePlayerData(UUID uuid) {
         PlayerData playerData = playerDataMap.get(uuid);
         if (playerData != null) {
-            plugin.getLogger().info("[DEBUG] Removing player data from memory for " + playerData.getPlayerName());
+            if (plugin.isDebugMode()) {
+                plugin.getLogger().info("[DEBUG] Removing player data from memory for " + playerData.getPlayerName());
+            }
         }
         playerDataMap.remove(uuid);
     }
@@ -257,7 +299,9 @@ public class PlayerDataManager {
     public PlayerData getPlayerData(UUID uuid) {
         PlayerData playerData = playerDataMap.get(uuid);
         if (playerData == null) {
-            plugin.getLogger().warning("[DEBUG] Attempted to get player data for UUID " + uuid + " but none was found in memory");
+            if (plugin.isDebugMode()) {
+                plugin.getLogger().warning("[DEBUG] Attempted to get player data for UUID " + uuid + " but none was found in memory");
+            }
         }
         return playerData;
     }
@@ -281,7 +325,9 @@ public class PlayerDataManager {
         PlayerData playerData = getPlayerData(player.getUniqueId());
         if (playerData != null) {
             playerData.setVeinMinerEnabled(enabled);
-            plugin.getLogger().info("[DEBUG] Set VeinMiner enabled=" + enabled + " for " + player.getName());
+            if (plugin.isDebugMode()) {
+                plugin.getLogger().info("[DEBUG] Set VeinMiner enabled=" + enabled + " for " + player.getName());
+            }
         }
     }
 
@@ -306,7 +352,9 @@ public class PlayerDataManager {
         PlayerData playerData = getPlayerData(player.getUniqueId());
         if (playerData != null) {
             playerData.setToolEnabled(toolType, enabled);
-            plugin.getLogger().info("[DEBUG] Set tool " + toolType + " enabled=" + enabled + " for " + player.getName());
+            if (plugin.isDebugMode()) {
+                plugin.getLogger().info("[DEBUG] Set tool " + toolType + " enabled=" + enabled + " for " + player.getName());
+            }
         }
     }
 
@@ -318,7 +366,9 @@ public class PlayerDataManager {
         UUID uuid = player.getUniqueId();
         String playerName = player.getName();
 
-        plugin.getLogger().info("[DEBUG] Force reloading player data for " + playerName);
+        if (plugin.isDebugMode()) {
+            plugin.getLogger().info("[DEBUG] Force reloading player data for " + playerName);
+        }
 
         // Remove existing data
         playerDataMap.remove(uuid);
@@ -326,7 +376,9 @@ public class PlayerDataManager {
         // Load fresh data
         loadPlayerData(player);
 
-        plugin.getLogger().info("[DEBUG] Player data force reloaded for " + playerName);
+        if (plugin.isDebugMode()) {
+            plugin.getLogger().info("[DEBUG] Player data force reloaded for " + playerName);
+        }
     }
 
     /**
@@ -337,16 +389,20 @@ public class PlayerDataManager {
         UUID uuid = player.getUniqueId();
         PlayerData playerData = playerDataMap.get(uuid);
         if (playerData == null) {
-            plugin.getLogger().warning("[DEBUG] Cannot save player settings: No data found in memory for " + player.getName());
+            if (plugin.isDebugMode()) {
+                plugin.getLogger().warning("[DEBUG] Cannot save player settings: No data found in memory for " + player.getName());
+            }
             return;
         }
 
-        plugin.getLogger().info("[DEBUG] Saving settings for " + playerData.getPlayerName() +
-                ": VeinMiner=" + playerData.isVeinMinerEnabled() +
-                ", Pickaxe=" + playerData.isToolEnabled("pickaxe") +
-                ", Axe=" + playerData.isToolEnabled("axe") +
-                ", Shovel=" + playerData.isToolEnabled("shovel") +
-                ", Hoe=" + playerData.isToolEnabled("hoe"));
+        if (plugin.isDebugMode()) {
+            plugin.getLogger().info("[DEBUG] Saving settings for " + playerData.getPlayerName() +
+                    ": VeinMiner=" + playerData.isVeinMinerEnabled() +
+                    ", Pickaxe=" + playerData.isToolEnabled("pickaxe") +
+                    ", Axe=" + playerData.isToolEnabled("axe") +
+                    ", Shovel=" + playerData.isToolEnabled("shovel") +
+                    ", Hoe=" + playerData.isToolEnabled("hoe"));
+        }
 
         savePlayerData(uuid);
     }
@@ -355,15 +411,21 @@ public class PlayerDataManager {
      * Test the database connection and log the result
      */
     public void testDatabaseConnection() {
-        plugin.getLogger().info("[DEBUG] Testing database connection...");
+        if (plugin.isDebugMode()) {
+            plugin.getLogger().info("[DEBUG] Testing database connection...");
+        }
 
         if (plugin.getDatabaseManager() == null) {
-            plugin.getLogger().warning("[DEBUG] Database manager is null!");
+            if (plugin.isDebugMode()) {
+                plugin.getLogger().warning("[DEBUG] Database manager is null!");
+            }
             return;
         }
 
         boolean isValid = plugin.getDatabaseManager().isConnectionValid();
-        plugin.getLogger().info("[DEBUG] Database connection is valid: " + isValid);
+        if (plugin.isDebugMode()) {
+            plugin.getLogger().info("[DEBUG] Database connection is valid: " + isValid);
+        }
 
         if (isValid) {
             Connection connection = null;
@@ -372,25 +434,37 @@ public class PlayerDataManager {
                 connection = plugin.getDatabaseManager().getConnection();
                 long endTime = System.currentTimeMillis();
 
-                plugin.getLogger().info("[DEBUG] Connection acquisition time: " + (endTime - startTime) + "ms");
+                if (plugin.isDebugMode()) {
+                    plugin.getLogger().info("[DEBUG] Connection acquisition time: " + (endTime - startTime) + "ms");
+                }
 
                 if (connection != null) {
-                    plugin.getLogger().info("[DEBUG] Connection obtained successfully.");
-                    plugin.getLogger().info("[DEBUG] Auto-commit: " + connection.getAutoCommit());
-                    plugin.getLogger().info("[DEBUG] Transaction isolation: " + connection.getTransactionIsolation());
+                    if (plugin.isDebugMode()) {
+                        plugin.getLogger().info("[DEBUG] Connection obtained successfully.");
+                        plugin.getLogger().info("[DEBUG] Auto-commit: " + connection.getAutoCommit());
+                        plugin.getLogger().info("[DEBUG] Transaction isolation: " + connection.getTransactionIsolation());
+                    }
                 } else {
-                    plugin.getLogger().warning("[DEBUG] Failed to get connection!");
+                    if (plugin.isDebugMode()) {
+                        plugin.getLogger().warning("[DEBUG] Failed to get connection!");
+                    }
                 }
             } catch (Exception e) {
-                plugin.getLogger().severe("[DEBUG] Error testing connection: " + e.getMessage());
+                if (plugin.isDebugMode()) {
+                    plugin.getLogger().severe("[DEBUG] Error testing connection: " + e.getMessage());
+                }
                 e.printStackTrace();
             } finally {
                 if (connection != null && !plugin.getDatabaseManager().isFallbackMode()) {
                     try {
                         connection.close();
-                        plugin.getLogger().info("[DEBUG] Connection closed successfully.");
+                        if (plugin.isDebugMode()) {
+                            plugin.getLogger().info("[DEBUG] Connection closed successfully.");
+                        }
                     } catch (SQLException e) {
-                        plugin.getLogger().warning("[DEBUG] Failed to close connection: " + e.getMessage());
+                        if (plugin.isDebugMode()) {
+                            plugin.getLogger().warning("[DEBUG] Failed to close connection: " + e.getMessage());
+                        }
                     }
                 }
             }

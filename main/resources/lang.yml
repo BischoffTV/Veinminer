@@ -3,6 +3,9 @@
 messages:
   prefix: "&8[&6VeinMiner&8] "
 
+  update:
+    available: "&eA new version of VeinMiner is available! Download it here: &bhttps://modrinth.com/plugin/veinminer-ultimate-mining-enhancement &eor here: &bhttps://www.spigotmc.org/resources/veinminer-ultimate-mining-enhancement.123199/"
+
   command:
     player-only: "&cThis command can only be used by players."
     no-permission: "&cYou don't have permission to use this command."

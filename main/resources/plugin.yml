@@ -1,5 +1,5 @@
 name: Veinminer
-version: '1.2.6'
+version: '1.2.7'
 main: org.bischofftv.veinminer.Veinminer
 api-version: '1.21'
 description: A plugin that allows players to mine connected blocks of the same type at once.
