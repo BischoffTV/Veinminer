@@ -154,3 +154,108 @@ If you encounter any issues or have suggestions, please visit our GitHub reposit
 - Automatic backups of config and database
 - Custom mining events (competitions, challenges, seasonal events)
 - Fast compatibility updates for new Minecraft versions
+
+## Plugin API & Integration
+
+VeinMiner offers a modern, asynchronous Java API for seamless integration with other plugins (e.g. quests, jobs, stats, custom achievements, etc.).
+
+### Accessing the API
+
+You can access the API from any other plugin using:
+
+```java
+VeinMinerAPI api = Veinminer.getAPI();
+```
+
+### Example: Get Player Level
+
+```java
+api.getPlayerLevel(player.getUniqueId()).thenAccept(level -> {
+    // Use the player's VeinMiner level
+    System.out.println("VeinMiner Level: " + level);
+});
+```
+
+### Example: Get Player Block Stats (total blocks mined)
+
+```java
+api.getPlayerBlockStats(player.getUniqueId()).thenAccept(stats -> {
+    int total = stats.getOrDefault("total", 0);
+    System.out.println("Total blocks mined: " + total);
+    // If per-block-type stats are supported in the future:
+    // stats.forEach((blockType, count) -> System.out.println(blockType + ": " + count));
+});
+```
+
+### Example: Check if Player Has Achievement
+
+```java
+api.hasAchievement(player.getUniqueId(), "total_blocks_advanced").thenAccept(has -> {
+    if (has) {
+        // Player has completed the achievement
+    }
+});
+```
+
+### Example: Get All Completed Achievements
+
+```java
+api.getCompletedAchievements(player.getUniqueId()).thenAccept(list -> {
+    for (String achievementId : list) {
+        System.out.println("Completed: " + achievementId);
+    }
+});
+```
+
+### Example: Check if VeinMiner is enabled for a player
+
+```java
+api.isVeinMinerEnabled(player.getUniqueId()).thenAccept(enabled -> {
+    if (enabled) {
+        System.out.println("VeinMiner is enabled for this player.");
+    }
+});
+```
+
+### Example: Enable or disable VeinMiner for a player
+
+```java
+api.setVeinMinerEnabled(player.getUniqueId(), true).thenRun(() -> {
+    System.out.println("VeinMiner enabled for player!");
+});
+```
+
+### Example: Listen for Block Mining Events
+
+```java
+api.addBlockMinedListener((player, block, amount) -> {
+    // React to blocks being mined by VeinMiner
+    System.out.println(player.getName() + " mined " + amount + " blocks of " + block.getType());
+});
+```
+
+### Example: Listen for Level Up Events
+
+```java
+api.addLevelUpListener((player, newLevel) -> {
+    System.out.println(player.getName() + " reached VeinMiner level " + newLevel);
+});
+```
+
+### Example: Listen for Achievement Completed Events
+
+```java
+api.addAchievementCompletedListener((player, achievementId) -> {
+    System.out.println(player.getName() + " completed achievement: " + achievementId);
+});
+```
+
+### Asynchronous & Thread-Safe
+
+All API methods are asynchronous and return `CompletableFuture`, so you can safely use them without blocking the server thread.
+
+
+
+- Designed for compatibility with quest, jobs, and stats plugins
+
+**See the source code for the full API!**
